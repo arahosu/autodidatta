@@ -1,1 +1,1 @@
-# SelfSupervisedSegmentation
+# Self-Supervised-Segmentation
