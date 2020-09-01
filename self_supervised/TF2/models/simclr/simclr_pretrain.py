@@ -1,6 +1,7 @@
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 from tensorflow.keras.regularizers import l1
+from tensorflow.keras.applications.resnet50 import ResNet50
 
 from self_supervised.TF2.utils.losses import nt_xent_loss
 
@@ -36,7 +37,7 @@ class SimCLR(tf.keras.Model):
 
     def __init__(self,
                  backbone,
-                 projection=None,
+                 projection,
                  loss_temperature=0.5):
 
         self.backbone = backbone
@@ -94,5 +95,29 @@ if __name__ == '__main__':
 
     """ Get Flags """
     from absl import flags
-    
 
+    # Define flags for pre-training
+
+    # Dataset
+    flags.DEFINE_enum('dataset', 'cifar10', ['cifar10', 'BraTS', 'OAI'], 'cifar10 (default), BraTS, OAI')
+    flags.DEFINE_string('dataset_dir', '.', 'set directory of your dataset')
+
+    # Training
+    flags.DEFINE_bool('online_finetune', True, 'set whether to run online finetuner')
+    flags.DEFINE_enum('optimizer', 'lars', ['lars', 'adam'], 'lars (default), adam')
+    flags.DEFINE_int('batch_size', '512', 'set batch size for pre-training.')
+    flags.DEFINE_float('learning_rate', '1.', 'set learning rate for optimizer.')
+    flags.DEFINE_float('lars_momentum', '0.9', 'set momentum for lars optimizer.')
+    flags.DEFINE_int('lars_sched_step', '30', 'set schedule step for lars optimizer')
+    flags.DEFINE_float('lar_gamma', '0.5', 'set gamma for lars optimizer')
+    flags.DEFINE_flags('weight_decay', '1e-04', 'set weight decay')
+
+    # Model specification
+    flags.DEFINE_enum('backbone', 'resnet50', ['resnet50', 'vgg16', 'vgg19'], 'resnet50 (default)')
+    flags.DEFINE_bool('use_2D', True, 'set whether to train on 2D or 3D data. Required for BraTS and OAI only')
+    flags.DEFINE_float('loss temperature', '0.5', 'set temperature for loss function')
+    flags.DEFINE_bool('use_gpu', 'False', 'set whether to use GPU')
+    flags.DEFINE_int('num_cores', '8', 'set number of cores/workers for TPUs/GPUs')
+    flags.DEFINE_str('tpu', 'oai-tpu', 'set the name of TPU device')
+
+    FLAGS = flags.FLAGS
