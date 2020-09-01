@@ -1,3 +1,7 @@
+""" 3D/2D compatible tf keras Resnet implementation of 
+Raghavendra Kotikalapudi's raghakot/keras-resnet
+and Cheng-Kun Yang's jimmy15923/3D_ResNet.py """
+
 
 import tensorflow as tf
 import numpy as np
@@ -282,14 +286,20 @@ class ResnetBuilder(object):
         flatten1 = tf.keras.layers.Flatten()(pool2)
         
         #flatten1 = GlobalAveragePooling3D()(block_output)
-        if num_outputs > 1:
-            dense = tf.keras.layers.Dense(
-                        units=num_outputs,
-                        kernel_initializer="he_normal",
-                        activation="softmax",
-                        kernel_regularizer=tf.keras.regularizers.l2(reg_factor))(flatten1)
-        else:
-            dense = tf.keras.layers.Dense(
+        # if num_outputs > 1:
+        #     dense = tf.keras.layers.Dense(
+        #                 units=num_outputs,
+        #                 kernel_initializer="he_normal",
+        #                 activation="softmax",
+        #                 kernel_regularizer=tf.keras.regularizers.l2(reg_factor))(flatten1)
+        # else:
+        #     dense = tf.keras.layers.Dense(
+        #                 units=num_outputs,
+        #                 kernel_initializer="he_normal",
+        #                 activation="sigmoid",
+        #                 kernel_regularizer=tf.keras.regularizers.l2(reg_factor))(flatten1)
+
+        dense = tf.keras.layers.Dense(
                         units=num_outputs,
                         kernel_initializer="he_normal",
                         activation="sigmoid",
@@ -350,3 +360,23 @@ class Basemodel(tf.keras.Model):
         self.blocks = 0 
 
         self.backbone = Model(self.model)
+
+
+if __name__ == "__main__":
+
+    # generate fake data
+    x = np.random.randint(0, 8, size=(1000, 256, 256, 8, 2))
+    y = np.random.randint(0, 8, size=(1000, 256, 256, 8, 2))
+
+    # y = np.random.choice([0, 1], size=(1000,))
+    y = tf.keras.utils.to_categorical(y, 8)
+
+    # build model  and copile it
+    res_model = ResnetBuilder.build_resnet_18(input_shape=(256, 256, 8, 2), num_outputs=8)
+
+    res_model.compile(tf.keras.optimizers.Adam(), loss="categorical_crossentropy")
+
+    res_model.summary()
+
+    # train ResMNet 3D model
+    res_model.fit(x, y, batch_size=16, epochs=3)
