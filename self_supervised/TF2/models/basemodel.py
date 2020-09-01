@@ -4,7 +4,7 @@ import numpy as np
 from tensorflow.keras.models import Model
 
 
-def _set_dimensionality(use_2d):
+def set_dimensionality(use_2d):
     """ Custom import tf keras function in their appropriate dimensionality """
     global CONV_VECTOR  # use as tuple for kernel size, strides, etc. in appropriate Dim
     global DIM1_AXIS
@@ -26,6 +26,7 @@ def _set_dimensionality(use_2d):
         from tensorflow.keras.layers import Conv3D as Conv
         from tensorflow.keras.layers import AveragePooling3D as AveragePooling
         CONV_VECTOR = np.array([1, 1, 1])
+
     if tf.keras.backend.image_data_format() == 'channels_last':
         DIM1_AXIS = 1
         DIM2_AXIS = 2
@@ -44,19 +45,20 @@ def _bn_relu(input):
     return tf.keras.layers.Activation("relu")(norm) #Activation("relu")(norm)
 
 
-def _conv_bn_relu(filters, kernel_size,
-                  strides=tuple(1 * CONV_VECTOR),
-                  kernel_initializer="he_normal",
-                  padding="same",
-                  kernel_regularizer=tf.keras.regularizers.l2(1e-8)):  #**conv_params):
-    # filters = conv_params["filters"]
-    # kernel_size = conv_params["kernel_size"]
-    # strides = conv_params.setdefault("strides", tuple(1 * CONV_VECTOR))
-    # kernel_initializer = conv_params.setdefault(
-    #     "kernel_initializer", "he_normal")
-    # padding = conv_params.setdefault("padding", "same")
-    # kernel_regularizer = conv_params.setdefault("kernel_regularizer",
-    #                                             tf.keras.regularizers.l2(1e-8))
+def _conv_bn_relu(**conv_params):  #filters,
+#                   kernel_size,
+#                   strides=tuple(1 * CONV_VECTOR),
+#                   kernel_initializer="he_normal",
+#                   padding="same",
+#                   kernel_regularizer=tf.keras.regularizers.l2(1e-8)):  
+    filters = conv_params["filters"]
+    kernel_size = conv_params["kernel_size"]
+    strides = conv_params.setdefault("strides", tuple(1 * CONV_VECTOR))
+    kernel_initializer = conv_params.setdefault(
+        "kernel_initializer", "he_normal")
+    padding = conv_params.setdefault("padding", "same")
+    kernel_regularizer = conv_params.setdefault("kernel_regularizer",
+                                                tf.keras.regularizers.l2(1e-8))
     def f(input):
         conv = Conv(filters=filters,
                     kernel_size=kernel_size,
@@ -79,25 +81,24 @@ def _get_block(identifier):
     return identifier
 
 
-
-def _shortcut3d(input, residual):
+def _shortcut(input, residual):
     """3D shortcut to match input and residual and merges them with "sum"."""
-    stride_dim1 = input.shape[DIM1_AXIS].value // residual.shape[DIM1_AXIS].value
-    stride_dim2 = input.shape[DIM2_AXIS].value // residual.shape[DIM2_AXIS].value
+    stride_dim1 = input.shape[DIM1_AXIS] // residual.shape[DIM1_AXIS]
+    stride_dim2 = input.shape[DIM2_AXIS] // residual.shape[DIM2_AXIS]
     if len(input.shape) >= 3:
-        stride_dim3 = input.shape[DIM3_AXIS].value // residual.shape[DIM3_AXIS].value
+        stride_dim3 = input.shape[DIM3_AXIS] // residual.shape[DIM3_AXIS]
         strides = (stride_dim1, stride_dim2, stride_dim3)
     else:
         strides = (stride_dim1, stride_dim2)
     # Trim strides down to correct dimensionality, using the conv vector as a proxy 
     # strides = tuple[strides[i] for i in range(len(CONV_VECTOR))]
 
-    equal_channels = residual.shape[CHANNEL_AXIS].value == input.shape[CHANNEL_AXIS].value
+    equal_channels = residual.shape[CHANNEL_AXIS] == input.shape[CHANNEL_AXIS]
     
     shortcut = input
     print(shortcut)
     if stride_dim1 > 1 or stride_dim2 > 1 or stride_dim3 > 1 or not equal_channels:
-        shortcut = Conv(filters=residual.shape[CHANNEL_AXIS].value,
+        shortcut = Conv(filters=residual.shape[CHANNEL_AXIS],
                         kernel_size=tuple(1 * CONV_VECTOR),
                         strides=strides,
                         kernel_initializer="he_normal", padding="valid",
@@ -107,10 +108,13 @@ def _shortcut3d(input, residual):
     return tf.keras.layers.add([shortcut, residual])
 
 
-def basic_block(filters, strides=tuple(1 * CONV_VECTOR), kernel_regularizer=tf.keras.regularizers.l2(1e-8),
+def basic_block(filters, strides=None, kernel_regularizer=tf.keras.regularizers.l2(1e-8),
                 is_first_block_of_first_layer=False):
     """Basic 3 X 3 X 3 convolution blocks. Extended from raghakot's 2D
     implementation by jimmy15923."""
+    if strides is None:
+        strides = tuple(1 * CONV_VECTOR)
+
     def f(input):
         if is_first_block_of_first_layer:
             # don't repeat bn->relu since we just did bn->relu->maxpool
@@ -133,16 +137,19 @@ def basic_block(filters, strides=tuple(1 * CONV_VECTOR), kernel_regularizer=tf.k
                                  kernel_regularizer=kernel_regularizer
                                  )(conv1)
 
-        return _shortcut3d(input, residual)
+        return _shortcut(input, residual)
 
     return f
 
 
 def bottleneck_block(filters, 
-                     strides=tuple(1 * CONV_VECTOR),
+                     strides=None,
                      kernel_regularizer=tf.keras.regularizers.l2(1e-8),
                      is_first_block_of_first_layer=False):
     """Basic 3 X 3 or 3 X 3 X 3 convolution blocks. Extended from raghakot's 2D impl by jimmy15923."""
+    if strides is None:
+        strides = tuple(1 * CONV_VECTOR)
+
     def f(input):
         if is_first_block_of_first_layer:
             # don't repeat bn->relu since we just did bn->relu->maxpool
@@ -164,7 +171,7 @@ def bottleneck_block(filters,
                                  kernel_regularizer=kernel_regularizer
                                  )(conv_3_3)
 
-        return _shortcut3d(input, residual)
+        return _shortcut(input, residual)
 
     return f
 
@@ -206,12 +213,18 @@ class Bottleneck(tf.keras.Sequential):
         self.stride = stride
 
 
-class Resnet3DBuilder(object):
+class ResnetBuilder(object):
     """Reimplementation of jimmy15923 ResNet3D.
     https://gist.github.com/jimmy15923/9c05b2064bc6de462d21df6285164026 """
 
     @staticmethod
-    def build(input_shape, num_outputs, block_fn, repetitions, reg_factor):
+    def build(
+        input_shape, 
+        num_outputs, 
+        block_fn, 
+        repetitions, 
+        reg_factor,
+        batch_size=None):
         """Instantiate a vanilla ResNet3D keras model.
         # Arguments
             input_shape: Tuple of input shape in the format
@@ -221,12 +234,13 @@ class Resnet3DBuilder(object):
             block_fn: Unit block to use {'basic_block', 'bottleneck_block'}
             repetitions: Repetitions of unit blocks
             reg_factor: layer regularization penalty
+            batch_size: Number of samples processed at a time
         # Returns
             model: a 3D ResNet model that takes a 5D tensor (volumetric images
             in batch) as input and returns a 1D vector (prediction) as output.
         """
-        use_2d = True
-        _set_dimensionality(use_2d)
+        use_2d = False
+        set_dimensionality(use_2d)
         # if len(input_shape) != 4:
         #     raise ValueError("Input shape should be a tuple "
         #                      "(conv_dim1, conv_dim2, conv_dim3, channels) "
@@ -235,7 +249,7 @@ class Resnet3DBuilder(object):
         #                      "for theano as backend")
 
         block_fn = _get_block(block_fn)
-        input = tf.keras.layers.Input(shape=input_shape)
+        input = tf.keras.Input(shape=input_shape, batch_size=batch_size)  # tf.keras.layers.Input(shape=input_shape)
 
         # first conv
         conv1 = _conv_bn_relu(filters=32,
@@ -285,34 +299,39 @@ class Resnet3DBuilder(object):
         return model
 
     @staticmethod
-    def build_resnet_18(input_shape, num_outputs, reg_factor=1e-4):
+    def build_resnet_18(input_shape, num_outputs, batch_size=None, reg_factor=1e-4):
         """Build resnet 18."""
-        return Resnet3DBuilder.build(input_shape, num_outputs, basic_block,
-                                     [2, 2, 2, 2], reg_factor=reg_factor)
+        return ResnetBuilder.build(input_shape, num_outputs, basic_block,
+                                repetitions=[2, 2, 2, 2], reg_factor=reg_factor, 
+                                batch_size=batch_size)
 
     @staticmethod
-    def build_resnet_34(input_shape, num_outputs, reg_factor=1e-4):
+    def build_resnet_34(input_shape, num_outputs, batch_size=None, reg_factor=1e-4):
         """Build resnet 34."""
-        return Resnet3DBuilder.build(input_shape, num_outputs, basic_block,
-                                     [3, 4, 6, 3], reg_factor=reg_factor)
+        return ResnetBuilder.build(input_shape, num_outputs, basic_block,
+                                repetitions=[3, 4, 6, 3], reg_factor=reg_factor, 
+                                batch_size=batch_size)
 
     @staticmethod
-    def build_resnet_50(input_shape, num_outputs, reg_factor=1e-4):
+    def build_resnet_50(input_shape, num_outputs, batch_size=None, reg_factor=1e-4):
         """Build resnet 50."""
-        return Resnet3DBuilder.build(input_shape, num_outputs, bottleneck_block,
-                                     [3, 4, 6, 3], reg_factor=reg_factor)
+        return ResnetBuilder.build(input_shape, num_outputs, bottleneck_block,
+                                repetitions=[3, 4, 6, 3], reg_factor=reg_factor, 
+                                batch_size=batch_size)
 
     @staticmethod
-    def build_resnet_101(input_shape, num_outputs, reg_factor=1e-4):
+    def build_resnet_101(input_shape, num_outputs, batch_size=None, reg_factor=1e-4):
         """Build resnet 101."""
-        return Resnet3DBuilder.build(input_shape, num_outputs, bottleneck_block,
-                                     [3, 4, 23, 3], reg_factor=reg_factor)
+        return ResnetBuilder.build(input_shape, num_outputs, bottleneck_block,
+                                repetitions=[3, 4, 23, 3], reg_factor=reg_factor, 
+                                batch_size=batch_size)
 
     @staticmethod
-    def build_resnet_152(input_shape, num_outputs, reg_factor=1e-4):
+    def build_resnet_152(input_shape, num_outputs, batch_size=None, reg_factor=1e-4):
         """Build resnet 152."""
-        return Resnet3DBuilder.build(input_shape, num_outputs, bottleneck_block,
-                                     [3, 8, 36, 3], reg_factor=reg_factor)
+        return ResnetBuilder.build(input_shape, num_outputs, bottleneck_block,
+                                repetitions=[3, 8, 36, 3], reg_factor=reg_factor, 
+                                batch_size=batch_size)
 
 
 class Basemodel(tf.keras.Model):
