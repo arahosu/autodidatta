@@ -14,7 +14,7 @@ SHAPE = (32,32,32,8)
 
 
 def load_data():
-    toy = np.random.rand(32,32,32,8)
+    toy = np.random.randint(0, 1, size=SHAPE)
     toy_samples = tf.data.Dataset.from_tensors([tf.constant(toy) for i in range(5)])
     toy_labels = tf.data.Dataset.from_tensors([tf.constant(toy) for i in range(5)])
     dataset = tf.data.Dataset.zip((toy_samples, toy_labels))
