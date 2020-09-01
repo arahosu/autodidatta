@@ -8,13 +8,13 @@ class BYOL(tf.keras.Model):
     
     def call(self, x, training=False):
         pass
-        
+
     def shared_step(self, data, training):
         pass
 
     def train_step(self, data):
         pass
-    
+
     def test_step(self, data):
         pass
 
