@@ -20,7 +20,7 @@ def identity_block(input_tensor,
     """
     filters1, filters2, filters3 = filters
     if channels_last:
-        bn_axis = 3
+        bn_axis = -1
     else:
         bn_axis = 1
 
@@ -73,7 +73,7 @@ def conv_block(input_tensor,
     """
     filters1, filters2, filters3 = filters
     if channels_last:
-        bn_axis = 3
+        bn_axis = -1
     else:
         bn_axis = 1
     conv_name_base = 'res' + str(stage) + block + '_branch'
@@ -119,13 +119,7 @@ def ResNet50(include_top,
     # Arguments
         include_top: whether to include the fully-connected
             layer at the top of the network.
-        input_shape: optional shape tuple, only to be specified
-            if `include_top` is False (otherwise the input shape
-            has to be `(224, 224, 3)` (with `channels_last` data format)
-            or `(3, 224, 224)` (with `channels_first` data format).
-            It should have exactly 3 inputs channels,
-            and width and height should be no smaller than 32.
-            E.g. `(200, 200, 3)` would be one valid value.
+        input_shape: shape tuple
         pooling: Optional pooling mode for feature extraction
             when `include_top` is `False`.
             - `None` means that the output of the model will be
@@ -142,9 +136,6 @@ def ResNet50(include_top,
             if no `weights` argument is specified.
     # Returns
         A Keras model instance.
-    # Raises
-        ValueError: in case of invalid argument for `weights`,
-            or invalid input shape.
     """
 
     img_input = tfkl.Input(shape=input_shape)
