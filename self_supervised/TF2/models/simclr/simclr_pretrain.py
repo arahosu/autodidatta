@@ -1,9 +1,11 @@
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
+import tensorflow_datasets as tfds
 from tensorflow.keras.regularizers import l1
 from tensorflow.keras.applications.resnet50 import ResNet50
 
 from self_supervised.TF2.utils.losses import nt_xent_loss
+from self_supervised.TF2.dataset.cifar10 import load_input_fn
 
 def get_projection_head(use_2D=True,
                         use_batchnorm=True,
@@ -41,10 +43,7 @@ class SimCLR(tf.keras.Model):
                  loss_temperature=0.5):
 
         self.backbone = backbone
-        if projection is None:
-            self.projection = get_projection_head()
-        else:
-            self.projection = projection
+        self.projection = projection
         self.loss_temperature = loss_temperature
 
     def call(self, x, training=False):
@@ -58,15 +57,23 @@ class SimCLR(tf.keras.Model):
         self.optimizer = optimizer
         self.loss_fn = loss_fn
 
+    def compute_output_shape(self, input_shape):
+
+        current_shape = self.backbone.compute_output_shape(input_shape)
+        if self.projection is not None:
+            current_shape = self.projection.compute_output_shape(current_shape)
+        return current_shape
+
     def shared_step(self, data, training):
 
         xi, xj = data
 
-        hi = self.backbone(xi, training=training)
-        hj = self.backbone(xj, trainnig=training)
+        zi = self.backbone(xi, training=training)
+        zj = self.backbone(xj, trainnig=training)
 
-        zi = self.projection(hi, training=training)
-        zj = self.projection(hj, training=training)
+        if self.projection is not None:
+            zi = self.projection(zi, training=training)
+            zj = self.projection(zj, training=training)
 
         zi = tf.math.l2_normalize(zi, axis=1)
         zj = tf.math.l2_normalize(zj, axis=1)
@@ -119,5 +126,31 @@ if __name__ == '__main__':
     flags.DEFINE_bool('use_gpu', 'False', 'set whether to use GPU')
     flags.DEFINE_int('num_cores', '8', 'set number of cores/workers for TPUs/GPUs')
     flags.DEFINE_str('tpu', 'oai-tpu', 'set the name of TPU device')
+    flags.DEFINE_bool('use_bfloat16', True, 'set whether to use mixed precision')
 
     FLAGS = flags.FLAGS
+
+    # load datasets:
+    if FLAGS.dataset == 'cifar10':
+        train_ds = load_input_fn(split=tfds.Split.TRAIN,
+                                 name='cifar10',
+                                 batch_size=FLAGS.batch_size,
+                                 use_bfloat16=FLAGS.use_bfloat16)
+
+        test_ds = load_input_fn(split=tfds.Split.TEST,
+                                name='cifar10',
+                                batch_size=FLAGS.batch_size,
+                                use_bfloat16=FLAGS.use_bfloat16)
+
+        ds_shape = (32, 32, 3)
+
+    if FLAGS.bacbkone == 'resnet50':
+
+        backbone = ResNet50(include_top=False,
+                            weights='random',
+                            input_shape=ds_shape)
+
+    # load model
+    model = SimCLR(backbone = FLAGS.backbone,
+                   projection = )
+    
