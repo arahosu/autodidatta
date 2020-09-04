@@ -305,6 +305,11 @@ class ResnetBuilder(object):
                         activation="sigmoid",
                         kernel_regularizer=tf.keras.regularizers.l2(reg_factor))(flatten1)
 
+        # conv layer outputting same dim but filter number
+        output == conv1x1
+        num_classes == num filters  Conv layer
+        softmax
+
         model = tf.keras.models.Model(inputs=input, outputs=dense)
         return model
 
@@ -365,14 +370,14 @@ class Basemodel(tf.keras.Model):
 if __name__ == "__main__":
 
     # generate fake data
-    x = np.random.randint(0, 8, size=(1000, 256, 256, 8, 2))
-    y = np.random.randint(0, 8, size=(1000, 256, 256, 8, 2))
+    x = np.random.randint(0, 8, size=(100, 8, 32, 32, 2))
+    y = np.random.randint(0, 8, size=(100, 8, 32, 32, 2))
 
     # y = np.random.choice([0, 1], size=(1000,))
     y = tf.keras.utils.to_categorical(y, 8)
 
     # build model  and copile it
-    res_model = ResnetBuilder.build_resnet_18(input_shape=(256, 256, 8, 2), num_outputs=8)
+    res_model = ResnetBuilder.build_resnet_18(input_shape=(8, 32, 32, 2), num_outputs=8)
 
     res_model.compile(tf.keras.optimizers.Adam(), loss="categorical_crossentropy")
 
