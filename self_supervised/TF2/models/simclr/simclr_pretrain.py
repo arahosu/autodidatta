@@ -1,9 +1,11 @@
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 import tensorflow_datasets as tfds
+from tensorflow_addons.optimizers import LAMB
 from tensorflow.keras.regularizers import l1
-from tensorflow.keras.applications.resnet50 import ResNet50
 
+from self_supervised.TF2.models.networks.resnet50 import ResNet50
+from self_supervised.TF2.utils.accelerator import setup_accelerator
 from self_supervised.TF2.utils.losses import nt_xent_loss
 from self_supervised.TF2.dataset.cifar10 import load_input_fn
 
@@ -111,7 +113,7 @@ if __name__ == '__main__':
 
     # Training
     flags.DEFINE_bool('online_finetune', True, 'set whether to run online finetuner')
-    flags.DEFINE_enum('optimizer', 'lars', ['lars', 'adam'], 'lars (default), adam')
+    flags.DEFINE_enum('optimizer', 'lamb', ['lamb', 'adam'], 'lars (default), adam')
     flags.DEFINE_int('batch_size', '512', 'set batch size for pre-training.')
     flags.DEFINE_float('learning_rate', '1.', 'set learning rate for optimizer.')
     flags.DEFINE_float('lars_momentum', '0.9', 'set momentum for lars optimizer.')
@@ -122,13 +124,19 @@ if __name__ == '__main__':
     # Model specification
     flags.DEFINE_enum('backbone', 'resnet50', ['resnet50', 'vgg16', 'vgg19'], 'resnet50 (default)')
     flags.DEFINE_bool('use_2D', True, 'set whether to train on 2D or 3D data. Required for BraTS and OAI only')
-    flags.DEFINE_float('loss temperature', '0.5', 'set temperature for loss function')
+    flags.DEFINE_float('loss_temperature', '0.5', 'set temperature for loss function')
     flags.DEFINE_bool('use_gpu', 'False', 'set whether to use GPU')
     flags.DEFINE_int('num_cores', '8', 'set number of cores/workers for TPUs/GPUs')
     flags.DEFINE_str('tpu', 'oai-tpu', 'set the name of TPU device')
     flags.DEFINE_bool('use_bfloat16', True, 'set whether to use mixed precision')
 
     FLAGS = flags.FLAGS
+
+    # Set up accelerator
+    strategy = setup_accelerator(FLAGS.use_gpu,
+                                 FLAGS.num_cores,
+                                 FLAGS.tpu)
+    global_batch_size = FLAGS.num_cores * FLAGS.batch_size
 
     # load datasets:
     if FLAGS.dataset == 'cifar10':
@@ -137,20 +145,34 @@ if __name__ == '__main__':
                                  batch_size=FLAGS.batch_size,
                                  use_bfloat16=FLAGS.use_bfloat16)
 
-        test_ds = load_input_fn(split=tfds.Split.TEST,
-                                name='cifar10',
-                                batch_size=FLAGS.batch_size,
-                                use_bfloat16=FLAGS.use_bfloat16)
+        val_ds = load_input_fn(split=tfds.Split.TEST,
+                               name='cifar10',
+                               batch_size=FLAGS.batch_size,
+                               use_bfloat16=FLAGS.use_bfloat16)
 
         ds_shape = (32, 32, 3)
 
     if FLAGS.bacbkone == 'resnet50':
 
         backbone = ResNet50(include_top=False,
-                            weights='random',
-                            input_shape=ds_shape)
+                            input_shape=ds_shape,
+                            pooling=None)
 
-    # load model
-    model = SimCLR(backbone = FLAGS.backbone,
-                   projection = )
-    
+    with strategy.scope():
+        # load model
+        model = SimCLR(backbone=FLAGS.backbone,
+                       projection=get_projection_head(),
+                       loss_temperature=FLAGS.loss_temperature)
+
+        if FLAGS.optimizer == 'lamb':
+            optimizer = LAMB(learning_rate=FLAGS.learning_rate)
+        elif FLAGS.optimizer == 'adam':
+            optimizer = tf.keras.optimizers.Adam(lr=FLAGS.learning_rate)
+
+        model.compile(optimizer=FLAGS.optimizer, loss_fn=nt_xent_loss)
+        model.summary()
+
+    model.fit(train_ds,
+              batch_size=global_batch_size,
+              epochs=100,
+              validation_data=val_ds)              
