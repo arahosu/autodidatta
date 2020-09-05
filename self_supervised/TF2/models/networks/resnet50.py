@@ -107,7 +107,7 @@ def conv_block(input_tensor,
     return x
 
 def ResNet50(include_top,
-             input_shape=None,
+             input_shape,
              pooling=None,
              channels_last=True,
              classes=10,
@@ -137,17 +137,23 @@ def ResNet50(include_top,
     # Returns
         A Keras model instance.
     """
+    height, width, num_channels = input_shape
+    
+    if height <= 32 or width <= 32:
+        conv1_strides = (1, 1)
+    else:
+        conv1_strides = (2, 2)
 
     img_input = tfkl.Input(shape=input_shape)
 
     if channels_last:
-        bn_axis = 3
+        bn_axis = -1
     else:
         bn_axis = 1
 
     x = tfkl.ZeroPadding2D(padding=(3, 3), name='conv1_pad')(img_input)
     x = tfkl.Conv2D(64, (7, 7),
-                    strides=(2, 2),
+                    strides=conv1_strides,
                     padding='valid',
                     kernel_initializer='he_normal',
                     name='conv1')(x)
