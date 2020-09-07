@@ -141,10 +141,8 @@ def ResNet50(include_top,
              pooling=None,
              channels_last=True,
              classes=10,
-             use_2d=True,
-             **kwargs):
+             use_2d=True):
     """Instantiates the ResNet50 architecture.
-    Optionally loads weights pre-trained on ImageNet.
     Note that the data format convention used by the model is
     the one specified in your Keras config at `~/.keras/keras.json`.
     # Arguments
@@ -169,11 +167,6 @@ def ResNet50(include_top,
         A Keras model instance.
     """
     height, width, num_channels = input_shape
-    
-    if height <= 32 or width <= 32:
-        conv1_strides = (1, 1)
-    else:
-        conv1_strides = (2, 2)
 
     # Set dimensionality 2D/3D
     if use_2d:
@@ -196,9 +189,9 @@ def ResNet50(include_top,
 
     x = ZeroPadding(padding=3,
                     name='conv1_pad')(img_input)
-    
+
     if height <= 32 or width <= 32:
-        conv_1_strides = 1 
+        conv_1_strides = 1
     else:
         conv_1_strides = 2
     x = Conv(64, 7,

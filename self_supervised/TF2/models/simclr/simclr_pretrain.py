@@ -2,6 +2,7 @@ import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 import tensorflow_datasets as tfds
 from tensorflow_addons.optimizers import LAMB
+from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import l1
 
 from self_supervised.TF2.models.networks.resnet50 import ResNet50
@@ -9,12 +10,15 @@ from self_supervised.TF2.utils.accelerator import setup_accelerator
 from self_supervised.TF2.utils.losses import nt_xent_loss
 from self_supervised.TF2.dataset.cifar10 import load_input_fn
 
+from self_supervised.TF2.models.simclr.simclr_flags import FLAGS
+from absl import app
+
 def get_projection_head(use_2D=True,
                         use_batchnorm=True,
                         activation='relu',
                         num_layers=1,
                         proj_head_dim=2048,
-                        proj_head_reg=1e-06,
+                        proj_head_reg=1e-04,
                         output_dim=128
                         ):
 
@@ -44,9 +48,18 @@ class SimCLR(tf.keras.Model):
                  projection,
                  loss_temperature=0.5):
 
+        super(SimCLR, self).__init__()
+
         self.backbone = backbone
         self.projection = projection
         self.loss_temperature = loss_temperature
+
+    def build(self, input_shape):
+
+        self.backbone.build(input_shape)
+        self.projection.build(self.backbone.compute_output_shape(input_shape))
+
+        self.built = True
 
     def call(self, x, training=False):
 
@@ -68,10 +81,13 @@ class SimCLR(tf.keras.Model):
 
     def shared_step(self, data, training):
 
-        xi, xj = data
+        x, y = data
+
+        xi = x[..., :3]
+        xj = x[..., 3:]
 
         zi = self.backbone(xi, training=training)
-        zj = self.backbone(xj, trainnig=training)
+        zj = self.backbone(xj, training=training)
 
         if self.projection is not None:
             zi = self.projection(zi, training=training)
@@ -84,9 +100,10 @@ class SimCLR(tf.keras.Model):
 
         return loss
 
+    @tf.function
     def train_step(self, data):
 
-        with tf.GradientTape as tape:
+        with tf.GradientTape() as tape:
             loss = self.shared_step(data, training=True)
         trainable_variables = self.trainable_variables
         grads = tape.gradient(loss, trainable_variables)
@@ -94,43 +111,16 @@ class SimCLR(tf.keras.Model):
 
         return {'train_loss': loss}
 
+    @tf.function
     def test_step(self, data):
 
         loss = self.shared_step(data, training=False)
 
         return {'validation_loss': loss}
 
-if __name__ == '__main__':
+def main(argv):
 
-    """ Get Flags """
-    from absl import flags
-
-    # Define flags for pre-training
-
-    # Dataset
-    flags.DEFINE_enum('dataset', 'cifar10', ['cifar10', 'BraTS', 'OAI'], 'cifar10 (default), BraTS, OAI')
-    flags.DEFINE_string('dataset_dir', '.', 'set directory of your dataset')
-
-    # Training
-    flags.DEFINE_bool('online_finetune', True, 'set whether to run online finetuner')
-    flags.DEFINE_enum('optimizer', 'lamb', ['lamb', 'adam'], 'lars (default), adam')
-    flags.DEFINE_int('batch_size', '512', 'set batch size for pre-training.')
-    flags.DEFINE_float('learning_rate', '1.', 'set learning rate for optimizer.')
-    flags.DEFINE_float('lars_momentum', '0.9', 'set momentum for lars optimizer.')
-    flags.DEFINE_int('lars_sched_step', '30', 'set schedule step for lars optimizer')
-    flags.DEFINE_float('lar_gamma', '0.5', 'set gamma for lars optimizer')
-    flags.DEFINE_flags('weight_decay', '1e-04', 'set weight decay')
-
-    # Model specification
-    flags.DEFINE_enum('backbone', 'resnet50', ['resnet50', 'vgg16', 'vgg19'], 'resnet50 (default)')
-    flags.DEFINE_bool('use_2D', True, 'set whether to train on 2D or 3D data. Required for BraTS and OAI only')
-    flags.DEFINE_float('loss_temperature', '0.5', 'set temperature for loss function')
-    flags.DEFINE_bool('use_gpu', 'False', 'set whether to use GPU')
-    flags.DEFINE_int('num_cores', '8', 'set number of cores/workers for TPUs/GPUs')
-    flags.DEFINE_str('tpu', 'oai-tpu', 'set the name of TPU device')
-    flags.DEFINE_bool('use_bfloat16', True, 'set whether to use mixed precision')
-
-    FLAGS = flags.FLAGS
+    del argv
 
     # Set up accelerator
     strategy = setup_accelerator(FLAGS.use_gpu,
@@ -143,16 +133,23 @@ if __name__ == '__main__':
         train_ds = load_input_fn(split=tfds.Split.TRAIN,
                                  name='cifar10',
                                  batch_size=FLAGS.batch_size,
-                                 use_bfloat16=FLAGS.use_bfloat16)
+                                 training_mode='pretrain')
+
+        # strategy.experimental_distribute_dataset(train_ds)
 
         val_ds = load_input_fn(split=tfds.Split.TEST,
                                name='cifar10',
                                batch_size=FLAGS.batch_size,
-                               use_bfloat16=FLAGS.use_bfloat16)
+                               training_mode='pretrain')
 
+        # strategy.experimental_distribute_dataset(val_ds)
+
+        ds_info = tfds.builder(FLAGS.dataset).info
+        steps_per_epoch = ds_info.splits['train'].num_examples // global_batch_size
+        validation_steps = ds_info.splits['test'].num_examples // global_batch_size
         ds_shape = (32, 32, 3)
 
-    if FLAGS.bacbkone == 'resnet50':
+    if FLAGS.backbone == 'resnet50':
 
         backbone = ResNet50(include_top=False,
                             input_shape=ds_shape,
@@ -160,19 +157,25 @@ if __name__ == '__main__':
 
     with strategy.scope():
         # load model
-        model = SimCLR(backbone=FLAGS.backbone,
-                       projection=get_projection_head(),
+        model = SimCLR(backbone=backbone,
+                       projection=get_projection_head(proj_head_reg=FLAGS.weight_decay),
                        loss_temperature=FLAGS.loss_temperature)
 
         if FLAGS.optimizer == 'lamb':
             optimizer = LAMB(learning_rate=FLAGS.learning_rate)
         elif FLAGS.optimizer == 'adam':
-            optimizer = tf.keras.optimizers.Adam(lr=FLAGS.learning_rate)
+            optimizer = Adam(lr=FLAGS.learning_rate)
 
-        model.compile(optimizer=FLAGS.optimizer, loss_fn=nt_xent_loss)
+        model.compile(optimizer=optimizer, loss_fn=nt_xent_loss)
+        model.build((None, *ds_shape))
         model.summary()
 
     model.fit(train_ds,
+              steps_per_epoch=steps_per_epoch,
               batch_size=global_batch_size,
               epochs=100,
-              validation_data=val_ds)              
+              validation_data=val_ds,
+              validation_steps=validation_steps)
+
+if __name__ == '__main__':
+    app.run(main)
