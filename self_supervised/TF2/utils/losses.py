@@ -20,3 +20,14 @@ def nt_xent_loss(out_i, out_j, temperature):
     loss = tf.math.reduce_mean(-tf.math.log(pos / neg))
 
     return loss
+
+def mse_loss(prediction_q, target_proj_z):
+    """ Mean square error between the normalized predictions
+    and target projections """
+
+    expected_value = 1
+    normalized_q = 1
+    normalized_z = 1
+    loss = 2 - 2 * expected_value / normalized_q * normalized_z
+
+    return loss
