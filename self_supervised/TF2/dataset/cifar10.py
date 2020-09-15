@@ -56,19 +56,19 @@ def load_input_fn(split,
         return image, label
 
     if proportion == 1.0:
-        dataset = tfds.load(name, split=split, as_supervised=True)
+        dataset = tfds.load(name, split=split, data_dir='gs://cifar10_baseline/', as_supervised=True)
     else:
         new_name = '{}:3.*.*'.format(name)
         if split == tfds.Split.TRAIN:
             new_split = 'train[:{}%]'.format(int(100 * proportion))
         else:
             new_split = 'test[:{}%]'.format(int(100 * proportion))
-        dataset = tfds.load(new_name, split=new_split, as_supervised=True)
+        dataset = tfds.load(new_name, split=new_split, data_dir='gs://cifar10_baseline/', as_supervised=True)
     if split == tfds.Split.TRAIN:
         dataset = dataset.shuffle(buffer_size=dataset_size).repeat()
 
     dataset = dataset.map(preprocess, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
-    
+
     return dataset
