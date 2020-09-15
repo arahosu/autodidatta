@@ -21,6 +21,7 @@ def nt_xent_loss(out_i, out_j, temperature):
 
     return loss
 
+"""
 def nt_xent_loss_v2(out_i, out_j, temperature):
     
     # positive similarity 
@@ -33,4 +34,24 @@ def nt_xent_loss_v2(out_i, out_j, temperature):
     for positives in [out_i, out_j]:
         l_neg = tf.tensordot(tf.expand_dims(positives, 1), tf.expand_dims(tf.transpose(negatives), 1), axes=2)
         labels = tf.zeros(n_samples / 2, dtype=tf.int32)
+"""
 
+def mse_loss(online_network_out_1, online_network_out_2, target_network_out_1, target_network_out_2):
+    """ Compute BYOLs loss function. Mean square error between
+    the normalized predictions and target projections.
+    Args:
+        online_network_out_1: prediction head output of online network on sample 1
+        online_network_out_2: prediction head output of online network on sample 2
+        online_network_out_1: projection head output of target network on sample 1
+        online_network_out_1: projection head output of target network on sample 2
+    """
+
+    def regression_loss(x, y):
+        norm_x, norm_y = tf.norm(x), tf.norm(y)
+        return (-2. * tf.keras.backend.sum(x * y, axis=-1) / (norm_x * norm_y))
+
+    # TODO: Add stop gradient to target networks?
+    loss = regression_loss(online_network_out_1, target_network_out_2)
+    loss += regression_loss(online_network_out_2, target_network_out_1)
+
+    return loss
