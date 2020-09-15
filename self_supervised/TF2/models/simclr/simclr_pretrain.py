@@ -2,7 +2,7 @@ import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 import tensorflow_datasets as tfds
 from tensorflow_addons.optimizers import LAMB
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam, SGD
 from tensorflow.keras.regularizers import l1
 
 from self_supervised.TF2.models.networks.resnet50 import ResNet50
@@ -100,7 +100,6 @@ class SimCLR(tf.keras.Model):
 
         return loss
 
-    @tf.function
     def train_step(self, data):
 
         with tf.GradientTape() as tape:
@@ -111,7 +110,6 @@ class SimCLR(tf.keras.Model):
 
         return {'train_loss': loss}
 
-    @tf.function
     def test_step(self, data):
 
         loss = self.shared_step(data, training=False)
@@ -149,14 +147,12 @@ def main(argv):
         validation_steps = ds_info.splits['test'].num_examples // global_batch_size
         ds_shape = (32, 32, 3)
 
-    if FLAGS.backbone == 'resnet50':
-
+    with strategy.scope():
+        # load model
         backbone = ResNet50(include_top=False,
                             input_shape=ds_shape,
                             pooling=None)
 
-    with strategy.scope():
-        # load model
         model = SimCLR(backbone=backbone,
                        projection=get_projection_head(proj_head_reg=FLAGS.weight_decay),
                        loss_temperature=FLAGS.loss_temperature)
@@ -165,6 +161,8 @@ def main(argv):
             optimizer = LAMB(learning_rate=FLAGS.learning_rate)
         elif FLAGS.optimizer == 'adam':
             optimizer = Adam(lr=FLAGS.learning_rate)
+        elif FLAGS.optimizer == 'sgd':
+            optimizer = SGD(lr=FLAGS.learning_rate, momentum=0.9)
 
         model.compile(optimizer=optimizer, loss_fn=nt_xent_loss)
         model.build((None, *ds_shape))
@@ -175,7 +173,8 @@ def main(argv):
               batch_size=global_batch_size,
               epochs=100,
               validation_data=val_ds,
-              validation_steps=validation_steps)
+              validation_steps=validation_steps,
+              verbose=1)
 
 if __name__ == '__main__':
     app.run(main)

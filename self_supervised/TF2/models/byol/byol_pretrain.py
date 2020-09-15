@@ -5,7 +5,10 @@ class BYOL(tf.keras.Model):
 
     def __init__(self):
         pass
-    
+
+    def compile(self):
+        pass
+
     def call(self, x, training=False):
         pass
 
