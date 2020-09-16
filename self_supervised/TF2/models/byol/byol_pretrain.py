@@ -101,13 +101,6 @@ class MLP(tf.keras.Sequential):
 
 class BYOL(tf.keras.Model):
 
-<<<<<<< HEAD
-    def __init__(self):
-        pass
-
-    def compile(self):
-        pass
-=======
     def __init__(self, in_shape, backbone, tau_base=0.996, loss_fn=None, steps=80):
         super(BYOL, self).__init__()
 
@@ -130,7 +123,6 @@ class BYOL(tf.keras.Model):
         self.target_network = tf.keras.models.clone_model(self.online_network)
         # TODO: give EMA appr inputs
         self.target_ema = EMA(tau_base, in_shape[-1])
->>>>>>> 650e2f52f39af8aaf5379571c773af12f0ca471a
 
     def call(self, x, training=False):
         return super(BYOL, self).call(x, training=training)

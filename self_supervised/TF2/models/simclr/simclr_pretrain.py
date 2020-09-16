@@ -8,6 +8,7 @@ from tensorflow.keras.regularizers import l1
 from self_supervised.TF2.models.networks.resnet50 import ResNet50
 from self_supervised.TF2.utils.accelerator import setup_accelerator
 from self_supervised.TF2.utils.losses import nt_xent_loss
+from self_supervised.TF2.utils.lr_finder import LRFinder
 from self_supervised.TF2.dataset.cifar10 import load_input_fn
 
 from self_supervised.TF2.models.simclr.simclr_flags import FLAGS
@@ -175,6 +176,6 @@ def main(argv):
               validation_data=val_ds,
               validation_steps=validation_steps,
               verbose=1)
-
+    
 if __name__ == '__main__':
     app.run(main)
