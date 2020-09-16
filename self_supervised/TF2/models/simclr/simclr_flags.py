@@ -9,7 +9,7 @@ flags.DEFINE_string('dataset_dir', '.', 'set directory of your dataset')
 flags.DEFINE_string('train_mode', 'pretrain', 'set whether to pretrain(default) or finetune')
 flags.DEFINE_enum('optimizer', 'lamb', ['lamb', 'adam'], 'lars (default), adam')
 flags.DEFINE_integer('batch_size', 8, 'set batch size for pre-training.')
-flags.DEFINE_float('learning_rate', 1e-03, 'set learning rate for optimizer.')
+flags.DEFINE_float('learning_rate', 1e-02, 'set learning rate for optimizer.')
 flags.DEFINE_float('weight_decay', 1e-04, 'set weight decay')
 
 # Model specification
@@ -18,7 +18,7 @@ flags.DEFINE_bool('use_2D', True, 'set whether to train on 2D or 3D data. Requir
 flags.DEFINE_float('loss_temperature', 0.5, 'set temperature for loss function')
 flags.DEFINE_bool('use_gpu', 'False', 'set whether to use GPU')
 flags.DEFINE_integer('num_cores', 8, 'set number of cores/workers for TPUs/GPUs')
-flags.DEFINE_string('tpu', 'oai-tpu', 'set the name of TPU device')
+flags.DEFINE_string('tpu', 'oai-tpu-v2', 'set the name of TPU device')
 flags.DEFINE_bool('use_bfloat16', True, 'set whether to use mixed precision')
 
 FLAGS = flags.FLAGS

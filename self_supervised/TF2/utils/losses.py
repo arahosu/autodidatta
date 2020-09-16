@@ -21,6 +21,20 @@ def nt_xent_loss(out_i, out_j, temperature):
 
     return loss
 
+"""
+def nt_xent_loss_v2(out_i, out_j, temperature):
+    
+    # positive similarity 
+
+    
+    loss = 0
+    negatives = tf.concat([out_i, out_j], axis=0)
+    n_samples = negatives.shape[0]
+
+    for positives in [out_i, out_j]:
+        l_neg = tf.tensordot(tf.expand_dims(positives, 1), tf.expand_dims(tf.transpose(negatives), 1), axes=2)
+        labels = tf.zeros(n_samples / 2, dtype=tf.int32)
+"""
 
 def mse_loss(online_network_out_1, online_network_out_2, target_network_out_1, target_network_out_2):
     """ Compute BYOLs loss function. Mean square error between
