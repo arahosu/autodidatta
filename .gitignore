@@ -1,2 +1,6 @@
 *.json
+
+# Python cache
+__pycache__
+.pyc
 *.cpython-37.pyc
