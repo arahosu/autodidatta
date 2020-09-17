@@ -101,11 +101,13 @@ class EMA():
 #         return super(MLP, self).call(x, training=training)
 
 
-def MLP(hidden_size, projection_size, name):
+def MLP(name, hidden_size=1, projection_size=256, in_shape=None):
+    #4096
     """ MLP head for projector and predictor """
     model = tf.keras.Sequential(name=name)
 
-    # model.add(tf.keras.Input(shape=in_shape))
+    if in_shape:
+        model.add(tf.keras.Input(shape=in_shape))
     model.add(tf.keras.layers.Flatten())
     model.add(tf.keras.layers.Dense(hidden_size))
     model.add(tf.keras.layers.BatchNormalization())
@@ -123,13 +125,13 @@ class BYOL(tf.keras.Model):
         self.loss_fn = loss_fn
         self.steps = steps
 
-        hidden_size = 4096
-        projection_size = 256
+        print(backbone.compute_output_shape((None, *in_shape)))
 
         self.online_network = tf.keras.Sequential([
             backbone,  # base encoder f, outputs feature space y as (8*img dims)
-            MLP(hidden_size, projection_size, name="projection"),  # MLP projection g, maps feature space onto 
-            MLP(hidden_size, projection_size, name="predictor")
+            tf.keras.layers.Flatten(),
+            MLP(name="projection"),  # MLP projection g, maps feature space onto 
+            MLP(name="predictor")
         ])  # NetWrapper()
 
         self.target_network = tf.keras.models.clone_model(self.online_network)
@@ -149,6 +151,11 @@ class BYOL(tf.keras.Model):
         super(BYOL, self).compile(**kwargs)
         self.optimizer = optimizer
         self.loss_fn = loss
+
+    def summary(self, line_length=None, positions=None, print_fn=None):
+        print("Online network:\n")
+        self.online_network.summary()
+        return super().summary(line_length=line_length, positions=positions, print_fn=print_fn)
 
     def shared_step(self, data, training):
         x, y = data
@@ -173,7 +180,7 @@ class BYOL(tf.keras.Model):
 
         return loss
 
-    # @tf.function
+    @tf.function
     def train_step(self, data):
         # apply gradient tape to online network only
         """
@@ -210,9 +217,9 @@ def main(argv):
     del argv
 
     # Set up accelerator
-    # strategy = setup_accelerator(FLAGS.use_gpu,
-    #                              FLAGS.num_cores,
-    #                              'oliv')
+    strategy = setup_accelerator(FLAGS.use_gpu,
+                                 FLAGS.num_cores,
+                                 'oliv')
 
     global_batch_size = FLAGS.num_cores * FLAGS.batch_size
 
@@ -235,28 +242,30 @@ def main(argv):
         validation_steps = ds_info.splits['test'].num_examples // global_batch_size
         ds_shape = (32, 32, 3)
 
-    # with strategy.scope():
+    with strategy.scope():
 
-    if FLAGS.backbone == 'resnet50':
+        if FLAGS.backbone == 'resnet50':
 
-        backbone = ResNet50(include_top=False,
-                            input_shape=ds_shape,
-                            pooling=None)
+            backbone = ResNet50(include_top=False,
+                                input_shape=ds_shape,
+                                pooling=None)
 
-    model = BYOL(
-        in_shape=ds_shape,
-        backbone=backbone
-    )
+        model = BYOL(
+            in_shape=ds_shape,
+            backbone=backbone
+        )
 
-    if FLAGS.optimizer == 'lamb':
-        optimizer = LAMB(learning_rate=FLAGS.learning_rate)
-    elif FLAGS.optimizer == 'adam':
-        optimizer = Adam(lr=FLAGS.learning_rate)
+        # model = MLP("test", in_shape=ds_shape)
 
-    # tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-    model.compile(optimizer=optimizer, loss=mse_loss, metrics=['accuracy'])
-    model.build((None, *ds_shape))
-    model.summary()
+        if FLAGS.optimizer == 'lamb':
+            optimizer = LAMB(learning_rate=FLAGS.learning_rate)
+        elif FLAGS.optimizer == 'adam':
+            optimizer = Adam(lr=FLAGS.learning_rate)
+
+        # tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        model.compile(optimizer=optimizer, loss=mse_loss, metrics=['accuracy'])
+        model.build((None, *ds_shape))
+        model.summary()
 
     # build model and compile it
     history = model.fit(train_ds,
