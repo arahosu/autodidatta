@@ -34,17 +34,17 @@ class EMA():
 
         self.tau = tau_base
 
+    # def update_average2(self, old, new, current_step):
+    #     self.tau = 1 - ((1-self.tau_base) * (tf.math.cos(np.pi * current_step / self.total_steps) + 1)/2)
+
+    #     def ma_update_fn(old, new):
+    #         return tf.math.scalar_mul(self.tau, old) + tf.math.scalar_mul((1 - self.tau), new)
+
+    #     if old is None:
+    #         return new
+    #     return [ma_update_fn(old_i, new_i) for old_i, new_i in zip(old, new)]
+
     def update_average(self, old, new, current_step):
-        self.tau = 1 - ((1-self.tau_base) * (tf.math.cos(np.pi * current_step / self.total_steps) + 1)/2)
-
-        def ma_update_fn(old, new):
-            return tf.math.scalar_mul(self.tau, old) + tf.math.scalar_mul((1 - self.tau), new)
-
-        if old is None:
-            return new
-        return [ma_update_fn(old_i, new_i) for old_i, new_i in zip(old, new)]
-
-    def update_average2(self, old, new, current_step):
         # Must be numpy calculation else use: self.tau = 1 - ((1-self.tau_base) * (tf.math.cos(np.pi * current_step / self.total_steps) + 1)/2)
         self.tau = 1 - ((1-self.tau_base) * (np.cos(np.pi * current_step / self.total_steps) + 1)/2)
 
@@ -63,11 +63,16 @@ class EMA():
 
         updated_weights = []
         for old_i, new_i in zip(old.layers, new.layers):
-            if not new.trainable:
-                continue
-            updated_weights.append(ma_update_fn(old_i.get_weights(), new_i.get_weights()))
+            if isinstance(new_i, tf.keras.layers.BatchNormalization) or not new_i or not new_i.trainable:
+                # updated_weights.append(new_i.get_weights())
+                updated_weights.append(new_i)
+            else:
+                old_i.set_weights(ma_update_fn(old_i.get_weights(), new_i.get_weights()))
+                updated_weights.append(old_i)
  
-        return [ma_update_fn(old_i.get_weights(), new_i.get_weights()) for old_i, new_i in zip(old.layers, new.layers)]
+        return updated_weights
+        # Same as above
+        # return [ma_update_fn(old_i.get_weights(), new_i.get_weights()) for old_i, new_i in zip(old.layers, new.layers)]
 
 # class NetWrapper(tf.keras.Model):
 #     """ Initializes the online network """
@@ -205,7 +210,7 @@ class BYOL(tf.keras.Model):
     def test_step(self, data):
         pass
 
-    @tf.function
+    # @tf.function
     def update_moving_average(self):
         assert self.target_network is not None, 'target encoder has not been created yet'
         
@@ -215,15 +220,17 @@ class BYOL(tf.keras.Model):
         #     self.current_step
         # ))
 
+        # Unfortunately only set_weights can modify tranable varuables 
+
         for i in range(len(self.target_network.layers)):
-            self.target_network.layers[i].set_weights(self.target_ema_updater.update_average2(
+            self.target_network.layers[i].set_weights(self.target_ema_updater.update_average(
                 self.target_network.layers[i],
                 self.online_network.layers[i],
                 self.current_step
             ))
 
-        for i in range(len(self.target_network.trainable_variables)):
-            self.target_network.trainable_variables.__setitem__(i, updated_target_weights[i])
+        # for i in range(len(self.target_network.trainable_variables)):
+        #     self.target_network.trainable_variables.__setitem__(i, updated_target_weights[i])
 
         # Get names of each var in trainable_variables, 
         # match to the layer.[i].kernel.name for index of names
