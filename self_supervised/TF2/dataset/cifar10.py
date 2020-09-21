@@ -10,6 +10,7 @@ def load_input_fn(split,
                   normalize=True,
                   drop_remainder=True,
                   proportion=1.0):
+
     """Prototype CIFAR dataset loader for training or testing.
     https://github.com/google/uncertainty-baselines/blob/master/baselines/cifar/utils.py
     Args:
