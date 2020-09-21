@@ -1,25 +1,23 @@
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 import tensorflow_datasets as tfds
-from tensorflow_addons.optimizers import LAMB
+from tensorflow_addons.optimizers import LAMB, AdamW
 from tensorflow.keras.optimizers import Adam, SGD
 from tensorflow.keras.regularizers import l1
 
+from absl import app
+from datetime import datetime
+import os
+
 from self_supervised.TF2.models.networks.resnet50 import ResNet50
 from self_supervised.TF2.utils.accelerator import setup_accelerator
-from self_supervised.TF2.utils.losses import nt_xent_loss
-from self_supervised.TF2.utils.lr_finder import LRFinder
+from self_supervised.TF2.utils.losses import nt_xent_loss, nt_xent_loss_v2
 from self_supervised.TF2.dataset.cifar10 import load_input_fn
-
 from self_supervised.TF2.models.simclr.simclr_flags import FLAGS
-from absl import app
+
 
 def get_projection_head(use_2D=True,
-                        use_batchnorm=True,
-                        activation='relu',
-                        num_layers=1,
                         proj_head_dim=2048,
-                        proj_head_reg=1e-04,
                         output_dim=128
                         ):
 
@@ -31,14 +29,11 @@ def get_projection_head(use_2D=True,
         model.add(tfkl.GlobalAveragePooling3D())
 
     model.add(tfkl.Flatten())
+    model.add(tfkl.Dense(proj_head_dim, use_bias=False))
+    model.add(tfkl.BatchNormalization())
+    model.add(tfkl.ReLU())
 
-    for _ in range(num_layers):
-        model.add(tfkl.Dense(proj_head_dim, kernel_regularizer=l1(proj_head_reg)))
-        if use_batchnorm:
-            model.add(tfkl.BatchNormalization())
-        model.add(tfkl.Activation(activation))
-
-    model.add(tfkl.Dense(proj_head_dim, kernel_regularizer=l1(proj_head_reg)))
+    model.add(tfkl.Dense(output_dim, use_bias=True))
 
     return model
 
@@ -58,7 +53,8 @@ class SimCLR(tf.keras.Model):
     def build(self, input_shape):
 
         self.backbone.build(input_shape)
-        self.projection.build(self.backbone.compute_output_shape(input_shape))
+        if self.projection is not None:
+            self.projection.build(self.backbone.compute_output_shape(input_shape))
 
         self.built = True
 
@@ -94,8 +90,8 @@ class SimCLR(tf.keras.Model):
             zi = self.projection(zi, training=training)
             zj = self.projection(zj, training=training)
 
-        zi = tf.math.l2_normalize(zi, axis=1)
-        zj = tf.math.l2_normalize(zj, axis=1)
+        zi = tf.math.l2_normalize(zi, axis=-1)
+        zj = tf.math.l2_normalize(zj, axis=-1)
 
         loss = self.loss_fn(zi, zj, self.loss_temperature)
 
@@ -115,7 +111,7 @@ class SimCLR(tf.keras.Model):
 
         loss = self.shared_step(data, training=False)
 
-        return {'validation_loss': loss}
+        return {'_loss': loss}
 
 def main(argv):
 
@@ -132,14 +128,16 @@ def main(argv):
         train_ds = load_input_fn(split=tfds.Split.TRAIN,
                                  name='cifar10',
                                  batch_size=FLAGS.batch_size,
-                                 training_mode='pretrain')
+                                 training_mode='pretrain',
+                                 use_cloud=False if FLAGS.use_gpu else True)
 
         # strategy.experimental_distribute_dataset(train_ds)
 
         val_ds = load_input_fn(split=tfds.Split.TEST,
                                name='cifar10',
                                batch_size=FLAGS.batch_size,
-                               training_mode='pretrain')
+                               training_mode='pretrain',
+                               use_cloud=False if FLAGS.use_gpu else True)
 
         # strategy.experimental_distribute_dataset(val_ds)
 
@@ -147,7 +145,7 @@ def main(argv):
         steps_per_epoch = ds_info.splits['train'].num_examples // global_batch_size
         validation_steps = ds_info.splits['test'].num_examples // global_batch_size
         ds_shape = (32, 32, 3)
-
+    
     with strategy.scope():
         # load model
         backbone = ResNet50(include_top=False,
@@ -155,27 +153,43 @@ def main(argv):
                             pooling=None)
 
         model = SimCLR(backbone=backbone,
-                       projection=get_projection_head(proj_head_reg=FLAGS.weight_decay),
+                       projection=get_projection_head(),
                        loss_temperature=FLAGS.loss_temperature)
 
+        lr_fn = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate=FLAGS.learning_rate,
+                                                               decay_steps=steps_per_epoch,
+                                                               decay_rate=0.8)
+
         if FLAGS.optimizer == 'lamb':
-            optimizer = LAMB(learning_rate=FLAGS.learning_rate)
+            optimizer = LAMB(learning_rate=FLAGS.learning_rate,
+                             weight_decay_rate=1e-04,
+                             exclude_from_weight_decay=['bias', 'BatchNormalization'])
         elif FLAGS.optimizer == 'adam':
-            optimizer = Adam(lr=FLAGS.learning_rate)
+            optimizer = Adam(learning_rate=lr_fn)
         elif FLAGS.optimizer == 'sgd':
-            optimizer = SGD(lr=FLAGS.learning_rate, momentum=0.9)
+            optimizer = SGD(learning_rate=lr_fn)
+        elif FLAGS.optimizer == 'adamw':
+            optimizer = AdamW(weight_decay=1e-06, learning_rate=FLAGS.learning_rate)
 
         model.compile(optimizer=optimizer, loss_fn=nt_xent_loss)
         model.build((None, *ds_shape))
         model.summary()
 
+    # Define checkpoints
+    time = datetime.now().strftime("%Y%m%d-%H%M%S")
+    logdir = os.path.join(FLAGS.logdir, time)
+    ckpt_cb = tf.keras.callbacks.ModelCheckpoint(logdir + '/simclr_weights.{epoch:03d}.ckpt',
+                                                 save_best_only=False,
+                                                 save_weights_only=True)
+
     model.fit(train_ds,
               steps_per_epoch=steps_per_epoch,
               batch_size=global_batch_size,
-              epochs=100,
+              epochs=50,
               validation_data=val_ds,
               validation_steps=validation_steps,
-              verbose=1)
-    
+              verbose=1,
+              callbacks=[ckpt_cb])
+
 if __name__ == '__main__':
     app.run(main)

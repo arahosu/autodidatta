@@ -122,20 +122,12 @@ def random_crop_with_resize(image, image_size, p=1.0):
         return image
     return random_apply(_transform, p=p, x=image)
 
-def random_color_jitter(image, strength, p=0.8):
+def random_color_jitter(image, strength, p=1.0):
 
     def _transform(image):
-        image = color_jitter(image, strength)
-    return image
-
-    return random_apply(_transform, p=p, x=image)
-
-def random_color_drop(image, p=0.2):
-
-    def _transform(image):
-        image = color_drop(image)
-    return image
-
+        color_jitter_t = partial(color_jitter, strength=strength)
+        image = random_apply(color_jitter_t, p=0.8, x=image)
+        return random_apply(color_drop, p=0.2, x=image)
     return random_apply(_transform, p=p, x=image)
 
 def random_blur(image, image_size, p=1.0):
@@ -205,4 +197,3 @@ def get_preprocess_fn(is_training, is_pretrain):
                    is_training=is_training,
                    color_distort=is_pretrain,
                    test_crop=test_crop)
-

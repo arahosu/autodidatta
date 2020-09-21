@@ -1,4 +1,15 @@
 import tensorflow as tf
+import numpy as np
+
+def get_negative_mask(batch_size):
+    # return a mask that removes the similarity score of equal/similar images.
+    # this function ensures that only distinct pair of images get their similarity scores
+    # passed as negative examples
+    negative_mask = np.ones((batch_size, 2 * batch_size), dtype=bool)
+    for i in range(batch_size):
+        negative_mask[i, i] = 0
+        negative_mask[i, i + batch_size] = 0
+    return tf.constant(negative_mask)
 
 def nt_xent_loss(out_i, out_j, temperature):
     """Negative cross-entropy loss function for SimCLR
@@ -21,20 +32,31 @@ def nt_xent_loss(out_i, out_j, temperature):
 
     return loss
 
-"""
 def nt_xent_loss_v2(out_i, out_j, temperature):
-    
-    # positive similarity 
 
-    
     loss = 0
     negatives = tf.concat([out_i, out_j], axis=0)
     n_samples = negatives.shape[0]
 
+    # positive similarity
+    l_pos = tf.matmul(tf.expand_dims(out_i, 1), tf.expand_dims(out_j, 2))
+    l_pos = tf.reshape(l_pos, (n_samples // 2, 1))
+    l_pos /= temperature
+
     for positives in [out_i, out_j]:
         l_neg = tf.tensordot(tf.expand_dims(positives, 1), tf.expand_dims(tf.transpose(negatives), 1), axes=2)
-        labels = tf.zeros(n_samples / 2, dtype=tf.int32)
-"""
+        labels = tf.zeros(n_samples // 2, dtype=tf.int32)
+
+        l_neg = tf.boolean_mask(l_neg, get_negative_mask(n_samples // 2))
+        l_neg = tf.reshape(l_neg, (n_samples // 2, -1))
+        l_neg /= temperature
+
+        logits = tf.concat([l_pos, l_neg], axis=1)
+        loss += tf.nn.sparse_softmax_cross_entropy_with_logits(labels, logits)
+
+    loss = loss / n_samples
+
+    return loss
 
 def mse_loss(online_network_out_1, online_network_out_2, target_network_out_1, target_network_out_2):
     """ Compute BYOLs loss function. Mean square error between
