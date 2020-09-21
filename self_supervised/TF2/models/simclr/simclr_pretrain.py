@@ -128,14 +128,16 @@ def main(argv):
         train_ds = load_input_fn(split=tfds.Split.TRAIN,
                                  name='cifar10',
                                  batch_size=FLAGS.batch_size,
-                                 training_mode='pretrain')
+                                 training_mode='pretrain',
+                                 use_cloud=False if FLAGS.use_gpu else True)
 
         # strategy.experimental_distribute_dataset(train_ds)
 
         val_ds = load_input_fn(split=tfds.Split.TEST,
                                name='cifar10',
                                batch_size=FLAGS.batch_size,
-                               training_mode='pretrain')
+                               training_mode='pretrain',
+                               use_cloud=False if FLAGS.use_gpu else True)
 
         # strategy.experimental_distribute_dataset(val_ds)
 
@@ -143,7 +145,7 @@ def main(argv):
         steps_per_epoch = ds_info.splits['train'].num_examples // global_batch_size
         validation_steps = ds_info.splits['test'].num_examples // global_batch_size
         ds_shape = (32, 32, 3)
-
+    
     with strategy.scope():
         # load model
         backbone = ResNet50(include_top=False,
