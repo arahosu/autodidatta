@@ -7,7 +7,8 @@ def load_input_fn(split,
                   batch_size,
                   name,
                   training_mode,
-                  normalize=True,
+                  use_cloud=True,
+                  normalize=False,
                   drop_remainder=True,
                   proportion=1.0):
 
@@ -38,14 +39,14 @@ def load_input_fn(split,
     def preprocess(image, label):
         """Image preprocessing function. Augmentations should be written
         as a separate function"""
-        image = tf.cast(image, tf.float32)
+        
+        image = tf.image.convert_image_dtype(image, tf.float32) # THIS STEP IS CRITICAL. DO NOT USE tf.cast
         label = tf.cast(label, tf.float32)
-
+        
         if normalize:
             mean = tf.constant([0.4914, 0.4822, 0.4465], dtype=tf.float32)
             std = tf.constant([0.2023, 0.1994, 0.2010], dtype=tf.float32)
             image = (image - mean) / std
-
         if training_mode == 'pretrain':
             xs = []
             for _ in range(2):
@@ -57,14 +58,21 @@ def load_input_fn(split,
         return image, label
 
     if proportion == 1.0:
-        dataset = tfds.load(name, split=split, data_dir='gs://cifar10_baseline/', as_supervised=True)
+        if use_cloud:
+            dataset = tfds.load(name, split=split, data_dir='gs://cifar10_baseline/', as_supervised=True)
+        else:
+            dataset = tfds.load(name, split=split, data_dir='C:/Users/Joonsu/tensorflow_datasets/', as_supervised=True)
     else:
         new_name = '{}:3.*.*'.format(name)
         if split == tfds.Split.TRAIN:
             new_split = 'train[:{}%]'.format(int(100 * proportion))
         else:
             new_split = 'test[:{}%]'.format(int(100 * proportion))
-        dataset = tfds.load(new_name, split=new_split, data_dir='gs://cifar10_baseline/', as_supervised=True)
+        if use_cloud:
+            dataset = tfds.load(new_name, split=new_split, data_dir='gs://cifar10_baseline/', as_supervised=True)
+        else:
+            dataset = tfds.load(new_name, split=new_split, data_dir='C:/Users/Joonsu/tensorflow_datasets/', as_supervised=True)
+
     if split == tfds.Split.TRAIN:
         dataset = dataset.shuffle(buffer_size=dataset_size).repeat()
 
