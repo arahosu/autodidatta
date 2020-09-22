@@ -23,12 +23,16 @@ def main(argv):
         train_ds = load_input_fn(split=tfds.Split.TRAIN,
                                  name='cifar10',
                                  batch_size=FLAGS.batch_size,
-                                 training_mode='finetune')
+                                 training_mode='finetune',
+                                 use_cloud=False if FLAGS.use_gpu else True,
+                                 normalize=FLAGS.normalize)
 
         val_ds = load_input_fn(split=tfds.Split.TEST,
                                name='cifar10',
                                batch_size=FLAGS.batch_size,
-                               training_mode='finetune')
+                               training_mode='finetune',
+                               use_cloud=False if FLAGS.use_gpu else True,
+                               normalize=FLAGS.normalize)
 
         ds_info = tfds.builder(FLAGS.dataset).info
         steps_per_epoch = ds_info.splits['train'].num_examples // global_batch_size

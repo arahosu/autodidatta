@@ -40,7 +40,7 @@ def load_input_fn(split,
         """Image preprocessing function. Augmentations should be written
         as a separate function"""
         
-        image = tf.image.convert_image_dtype(image, tf.float32) # THIS STEP IS CRITICAL. DO NOT USE tf.cast
+        image = tf.image.convert_image_dtype(image, tf.float32)  # THIS STEP IS CRITICAL. DO NOT USE tf.cast
         label = tf.cast(label, tf.float32)
         
         if normalize:
