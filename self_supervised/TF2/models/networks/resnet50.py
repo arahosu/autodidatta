@@ -204,7 +204,7 @@ def ResNet50(include_top,
     x = ZeroPadding(padding=1, name='pool1_pad')(x)
     x = MaxPooling(3, strides=2)(x)
 
-    x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=2)
+    x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=1)
     x = identity_block(x, 3, [64, 64, 256], stage=2, block='b')
     x = identity_block(x, 3, [64, 64, 256], stage=2, block='c')
 
