@@ -29,11 +29,11 @@ def get_projection_head(use_2D=True,
         model.add(tfkl.GlobalAveragePooling3D())
 
     model.add(tfkl.Flatten())
-    model.add(tfkl.Dense(proj_head_dim, use_bias=False))
+    model.add(tfkl.Dense(proj_head_dim, use_bias=True))
     model.add(tfkl.BatchNormalization())
     model.add(tfkl.ReLU())
 
-    model.add(tfkl.Dense(output_dim, use_bias=True))
+    model.add(tfkl.Dense(output_dim, use_bias=False))
 
     return model
 
