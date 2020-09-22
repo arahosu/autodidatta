@@ -19,7 +19,7 @@ def multiplicative_random_brightness(image, max_delta):
 
     return image
 
-def color_jitter(image, strength):
+def color_jitter(image, strength=1.0):
 
     brightness = 0.8 * strength
     contrast = 0.8 * strength
@@ -156,7 +156,7 @@ def preprocess_for_train(image,
         image = tf.image.random_flip_left_right(image)
 
     if color_distort:
-        image = random_color_jitter(image, strength=1.0)
+        image = random_color_jitter(image, strength=0.5)
 
     height, width = image_size[0], image_size[1]
 

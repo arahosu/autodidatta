@@ -191,18 +191,25 @@ def ResNet50(include_top,
                     name='conv1_pad')(img_input)
 
     if height <= 32 or width <= 32:
-        conv_1_strides = 1
+        # CIFAR stem
+        x = x = Conv(64, 3,
+                     strides=1,
+                     padding='valid',
+                     kernel_initializer='he_normal',
+                     name='conv1')(x)
+        x = tfkl.BatchNormalization(axis=bn_axis, name='bn_conv1')(x)
+        x = tfkl.Activation('relu')(x)
+        x = ZeroPadding(padding=1, name='pool1_pad')(x)
     else:
-        conv_1_strides = 2
-    x = Conv(64, 7,
-             strides=conv_1_strides,
-             padding='valid',
-             kernel_initializer='he_normal',
-             name='conv1')(x)
-    x = tfkl.BatchNormalization(axis=bn_axis, name='bn_conv1')(x)
-    x = tfkl.Activation('relu')(x)
-    x = ZeroPadding(padding=1, name='pool1_pad')(x)
-    x = MaxPooling(3, strides=2)(x)
+        x = Conv(64, 7,
+                 strides=2,
+                 padding='valid',
+                 kernel_initializer='he_normal',
+                 name='conv1')(x)
+        x = tfkl.BatchNormalization(axis=bn_axis, name='bn_conv1')(x)
+        x = tfkl.Activation('relu')(x)
+        x = ZeroPadding(padding=1, name='pool1_pad')(x)
+        x = MaxPooling(3, strides=2)(x)
 
     x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=1)
     x = identity_block(x, 3, [64, 64, 256], stage=2, block='b')
