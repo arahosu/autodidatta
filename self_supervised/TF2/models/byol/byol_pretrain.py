@@ -5,6 +5,7 @@ import tensorflow as tf
 from tensorflow_addons.optimizers import LAMB
 from tensorflow.keras.optimizers import Adam
 import numpy as np
+from itertools import cycle
 
 # JUST FOR DEBUGGING ON VSCODE 
 import os,sys,inspect
@@ -33,15 +34,45 @@ class EMA():
 
         self.tau = tau_base
 
+    # def update_average2(self, old, new, current_step):
+    #     self.tau = 1 - ((1-self.tau_base) * (tf.math.cos(np.pi * current_step / self.total_steps) + 1)/2)
+
+    #     def ma_update_fn(old, new):
+    #         return tf.math.scalar_mul(self.tau, old) + tf.math.scalar_mul((1 - self.tau), new)
+
+    #     if old is None:
+    #         return new
+    #     return [ma_update_fn(old_i, new_i) for old_i, new_i in zip(old, new)]
+
     def update_average(self, old, new, current_step):
-        self.tau = 1 - ((1-self.tau_base) * (tf.math.cos(np.pi * current_step / self.total_steps) + 1)/2)
+        # Must be numpy calculation else use: self.tau = 1 - ((1-self.tau_base) * (tf.math.cos(np.pi * current_step / self.total_steps) + 1)/2)
+        self.tau = 1 - ((1-self.tau_base) * (np.cos(np.pi * current_step / self.total_steps) + 1)/2)
 
         def ma_update_fn(old, new):
+            if not old:
+                return new
+            if isinstance(old, list):
+                old_all = []
+                for old_weights, new_weights in zip(old, new):
+                    old_all.append((self.tau * old_weights) + ((1 - self.tau) * new_weights))
+                return old_all
             return tf.math.scalar_mul(self.tau, old) + tf.math.scalar_mul((1 - self.tau), new)
 
-        if old is None:
+        if not old.trainable_variables:
             return new
-        return [ma_update_fn(old_i, new_i) for old_i, new_i in zip(old, new)]
+
+        updated_weights = []
+        for old_i, new_i in zip(old.layers, new.layers):
+            if isinstance(new_i, tf.keras.layers.BatchNormalization) or not new_i or not new_i.trainable:
+                # updated_weights.append(new_i.get_weights())
+                updated_weights.append(new_i)
+            else:
+                old_i.set_weights(ma_update_fn(old_i.get_weights(), new_i.get_weights()))
+                updated_weights.append(old_i)
+ 
+        return updated_weights
+        # Same as above
+        # return [ma_update_fn(old_i.get_weights(), new_i.get_weights()) for old_i, new_i in zip(old.layers, new.layers)]
 
 # class NetWrapper(tf.keras.Model):
 #     """ Initializes the online network """
@@ -72,13 +103,20 @@ def MLP(name, hidden_size=4096, projection_size=256, in_shape=None):
 
 class BYOL(tf.keras.Model):
 
-    def __init__(self, in_shape, backbone, tau_base=0.996, loss_fn=None, steps=80):
+    def __init__(self, in_shape, backbone='resnet50', tau_base=0.996, loss_fn=None, steps=80):
         super(BYOL, self).__init__()
 
         # For EMA updater
+        # TODO: delete loss fn? 
         self.loss_fn = loss_fn
         self.steps = steps
         self.current_step = 0
+
+        # Model
+        if FLAGS.backbone == 'resnet50':
+            backbone = ResNet50(include_top=False,
+                                input_shape=in_shape,
+                                pooling=None)
 
         print(backbone.compute_output_shape((None, *in_shape)))
 
@@ -89,14 +127,27 @@ class BYOL(tf.keras.Model):
             MLP(name="predictor")
         ], name="online_network")  # NetWrapper()
 
+        if FLAGS.backbone == 'resnet50':
+            backbone = ResNet50(include_top=False,
+                                input_shape=in_shape,
+                                pooling=None)
+
         self.target_network = tf.keras.Sequential([
             backbone,  # base encoder f, outputs feature space y as (8*img dims)
             tf.keras.layers.Flatten(),
             MLP(name="projection"),  # MLP projection g, maps feature space onto 
             MLP(name="predictor_")
         ], name="target_network")
-        # TODO: give EMA appr inputs
+
+        # TODO: give EMA appr inputs for step
         self.target_ema_updater = EMA(tau_base, steps)
+
+        # TODO: delete
+        self.update_moving_average()
+
+    def augment(self, data):
+        # TODO: use imported augment utils
+        return tf.layers.experimental.preprocessing.RandomFlip(data)
 
     def build(self, input_shape):
         self.online_network.build(input_shape)
@@ -118,8 +169,6 @@ class BYOL(tf.keras.Model):
 
     def shared_step(self, data, training):
         x, y = data
-
-        last_channel = x.shape[-1]
 
         view_1 = x[..., :3]
         view_2 = x[..., 3:]
@@ -161,21 +210,64 @@ class BYOL(tf.keras.Model):
     def test_step(self, data):
         pass
 
+    # @tf.function
     def update_moving_average(self):
         assert self.target_network is not None, 'target encoder has not been created yet'
+        
+        # updated_target_weights = (self.target_ema_updater.update_average(
+        #     self.target_network.trainable_variables,
+        #     self.online_network.trainable_variables,
+        #     self.current_step
+        # ))
 
-        updated_target_weights = self.target_ema_updater.update_average(
-            self.online_network.trainable_variables,
-            self.target_network.trainable_variables,
-            self.current_step
-        )
+        # Unfortunately only set_weights can modify tranable varuables 
 
-        print(updated_target_weights)
-        print(type(updated_target_weights))
+        for i in range(len(self.target_network.layers)):
+            self.target_network.layers[i].set_weights(self.target_ema_updater.update_average(
+                self.target_network.layers[i],
+                self.online_network.layers[i],
+                self.current_step
+            ))
 
-        for i in range(len(updated_target_weights)):
-            self.target_network.layers[i].set_weights(updated_target_weights[i])
+        # for i in range(len(self.target_network.trainable_variables)):
+        #     self.target_network.trainable_variables.__setitem__(i, updated_target_weights[i])
 
+        # Get names of each var in trainable_variables, 
+        # match to the layer.[i].kernel.name for index of names
+        # trainable_layer_names = [var.name for var in self.target_network.trainable_variables]
+
+        # name_cyc = enumerate(trainable_layer_names)
+        # i, name = next(name_cyc)
+        # for block_i in range(len(self.target_network.layers)):
+        #     if not self.target_network.layers[block_i].trainable_variables:
+        #         # If this layer or layer block has no trainable vars continue
+        #         continue
+
+        #     for layer_i in range(len(self.target_network.layers[block_i].layers)):
+        #         print(self.target_network.layers[block_i].layers[layer_i].name)
+                
+        #         if self.target_network.layers[block_i].layers[layer_i].name == name:
+        #             self.target_network.layers[block_i].layers[layer_i].set_weights(updated_target_weights[i])
+        #             i, name = next(name_cyc)
+
+
+        # for i, name in enumerate(trainable_layer_names):
+        #     # Check that current layer names match
+
+        #     # if self.target_network.layers[block_i]._object_identifier == '_tf_keras_layer':
+        #     #     current_layer = self.target_network.layers[block_i]
+        #     #     block_i += 1
+        #     # else:
+        #     #     current_layer = self.target_network.layers[block_i].layer[layer_i]
+
+        #     if not self.target_network.layers[block_i].trainable_variables:
+        #         continue
+
+        #     for layer_i in range(len(self.target_network.layers[block_i].layers)):
+        #         if self.target_network.layers[block_i].layers[layer_i].name == name:
+        #             self.target_network.layers[block_i].layers[layer_i].set_weights(updated_target_weights[i])
+            
+        #     block_i += 1
         # for i in range(len(self.target_network.layers)):
         #     self.target_network.layer[i].set_weights(self.target_ema_updater.update_average(
         #         self.online_network.trainable_variables,
@@ -186,10 +278,6 @@ class BYOL(tf.keras.Model):
         # for current_params, ma_params in zip(self.online_network.trainable_variables, self.target_network.trainable_variables):
         #     old_weight, up_weight = ma_params.data, current_params.data
         #     ma_params.data = self.target_ema_updater.update_average(old_weight, up_weight, self.current_step)
-
-    def augment(self, data):
-        # TODO: use imported augment utils
-        return tf.layers.experimental.preprocessing.RandomFlip(data)
 
 
 def main(argv):
@@ -223,15 +311,9 @@ def main(argv):
 
     # with strategy.scope():
 
-    if FLAGS.backbone == 'resnet50':
-
-        backbone = ResNet50(include_top=False,
-                            input_shape=ds_shape,
-                            pooling=None)
-
     model = BYOL(
         in_shape=ds_shape,
-        backbone=backbone
+        backbone=FLAGS.backbone
     )
 
     if FLAGS.optimizer == 'lamb':
@@ -246,11 +328,11 @@ def main(argv):
 
     # build model and compile it
     history = model.fit(train_ds,
-              steps_per_epoch=steps_per_epoch,
-              batch_size=global_batch_size,
-              epochs=10,
-              validation_data=val_ds,
-              validation_steps=validation_steps)
+                        steps_per_epoch=steps_per_epoch,
+                        batch_size=global_batch_size,
+                        epochs=10,
+                        validation_data=val_ds,
+                        validation_steps=validation_steps)
 
     print(history)
 
