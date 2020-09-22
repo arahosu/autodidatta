@@ -53,11 +53,24 @@ def main(argv):
         model.load_weights(FLAGS.weights).expect_partial()
         model.trainable = False  # Freeze the resnet weights
 
-        evaluator = tf.keras.Sequential([
-            model.backbone,
-            tfkl.Flatten(),
-            tfkl.Dense(10, activation='softmax')
-        ])
+        if FLAGS.linear_eval:
+            evaluator = tf.keras.Sequential([
+                model.backbone,
+                tfkl.Flatten(),
+                tfkl.Dropout(rate=0.2),
+                tfkl.Dense(10, activation='softmax')
+            ])
+        else:
+            evaluator = tf.keras.Sequential([
+                model.backbone,
+                tfkl.Flatten(),
+                tfkl.Dropout(rate=0.2),
+                tfkl.Dense(512, use_bias=False),
+                tfkl.BatchNormalization(),
+                tfkl.ReLU(),
+                tfkl.Dropout(rate=0.2),
+                tfkl.Dense(10, activation='softmax')
+            ])
 
         optimizer = tfa.optimizers.AdamW(weight_decay=1e-06, learning_rate=1e-03)
 
