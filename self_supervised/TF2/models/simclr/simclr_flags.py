@@ -13,6 +13,9 @@ flags.DEFINE_integer('batch_size', 128, 'set batch size for pre-training.')
 flags.DEFINE_float('learning_rate', 1e-03, 'set learning rate for optimizer.')
 flags.DEFINE_float('weight_decay', 1e-04, 'set weight decay')
 
+# Finetuning
+flags.DEFINE_bool('linear', True, 'Set whether to run linear (Default) or non-linear evaluation protocol')
+
 # Model specification
 flags.DEFINE_enum('backbone', 'resnet50', ['resnet50', 'vgg16', 'vgg19'], 'resnet50 (default)')
 flags.DEFINE_bool('use_2D', True, 'set whether to train on 2D or 3D data. Required for BraTS and OAI only')

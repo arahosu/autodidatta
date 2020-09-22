@@ -143,7 +143,7 @@ def main(argv):
         steps_per_epoch = ds_info.splits['train'].num_examples // global_batch_size
         validation_steps = ds_info.splits['test'].num_examples // global_batch_size
         ds_shape = (32, 32, 3)
-    
+
     with strategy.scope():
         # load model
         backbone = ResNet50(include_top=False,
@@ -167,7 +167,8 @@ def main(argv):
 
         model.compile(optimizer=optimizer, loss_fn=nt_xent_loss)
         model.build((None, *ds_shape))
-        model.summary()
+        model.backbone.summary()
+        model.projection.summary()
 
     # Define checkpoints
     time = datetime.now().strftime("%Y%m%d-%H%M%S")

@@ -187,20 +187,20 @@ def ResNet50(include_top,
     else:
         bn_axis = 1
 
-    x = ZeroPadding(padding=3,
-                    name='conv1_pad')(img_input)
-
     if height <= 32 or width <= 32:
         # CIFAR stem
-        x = x = Conv(64, 3,
-                     strides=1,
-                     padding='valid',
-                     kernel_initializer='he_normal',
-                     name='conv1')(x)
+        x = ZeroPadding(padding=1,
+                        name='conv1_pad')(img_input)
+        x = Conv(64, 3,
+                 strides=1,
+                 padding='valid',
+                 kernel_initializer='he_normal',
+                 name='conv1')(x)
         x = tfkl.BatchNormalization(axis=bn_axis, name='bn_conv1')(x)
         x = tfkl.Activation('relu')(x)
-        x = ZeroPadding(padding=1, name='pool1_pad')(x)
     else:
+        x = ZeroPadding(padding=3,
+                        name='conv1_pad')(img_input)
         x = Conv(64, 7,
                  strides=2,
                  padding='valid',
