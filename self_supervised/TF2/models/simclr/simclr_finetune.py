@@ -1,6 +1,7 @@
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 import tensorflow_datasets as tfds
+import tensorflow_addons as tfa
 
 from absl import app
 
@@ -55,11 +56,12 @@ def main(argv):
         evaluator = tf.keras.Sequential([
             model.backbone,
             tfkl.Flatten(),
-            tfkl.Dropout(0.1),
             tfkl.Dense(10, activation='softmax')
         ])
 
-        evaluator.compile(optimizer='adam', loss=tf.keras.losses.sparse_categorical_crossentropy, metrics=['acc'])
+        optimizer = tfa.optimizers.AdamW(weight_decay=1e-06, learning_rate=1e-03)
+
+        evaluator.compile(optimizer=optimizer, loss=tf.keras.losses.sparse_categorical_crossentropy, metrics=['acc'])
         evaluator.build((None, *ds_shape))
         evaluator.summary()
 

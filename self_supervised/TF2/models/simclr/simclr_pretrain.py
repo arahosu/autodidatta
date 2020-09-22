@@ -17,7 +17,7 @@ from self_supervised.TF2.models.simclr.simclr_flags import FLAGS
 
 
 def get_projection_head(use_2D=True,
-                        proj_head_dim=2048,
+                        proj_head_dim=512,
                         output_dim=128
                         ):
 
@@ -153,10 +153,6 @@ def main(argv):
         model = SimCLR(backbone=backbone,
                        projection=get_projection_head(),
                        loss_temperature=FLAGS.loss_temperature)
-
-        lr_fn = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate=FLAGS.learning_rate,
-                                                               decay_steps=steps_per_epoch,
-                                                               decay_rate=0.8)
 
         if FLAGS.optimizer == 'lamb':
             optimizer = LAMB(learning_rate=FLAGS.learning_rate,

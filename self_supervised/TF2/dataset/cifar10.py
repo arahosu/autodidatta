@@ -39,10 +39,10 @@ def load_input_fn(split,
     def preprocess(image, label):
         """Image preprocessing function. Augmentations should be written
         as a separate function"""
-        
+
         image = tf.image.convert_image_dtype(image, tf.float32)  # THIS STEP IS CRITICAL. DO NOT USE tf.cast
         label = tf.cast(label, tf.float32)
-        
+
         if normalize:
             mean = tf.constant([0.4914, 0.4822, 0.4465], dtype=tf.float32)
             std = tf.constant([0.2023, 0.1994, 0.2010], dtype=tf.float32)
