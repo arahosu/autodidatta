@@ -129,17 +129,15 @@ def main(argv):
                                  name='cifar10',
                                  batch_size=FLAGS.batch_size,
                                  training_mode='pretrain',
-                                 use_cloud=False if FLAGS.use_gpu else True)
-
-        # strategy.experimental_distribute_dataset(train_ds)
+                                 use_cloud=False if FLAGS.use_gpu else True,
+                                 normalize=FLAGS.normalize)
 
         val_ds = load_input_fn(split=tfds.Split.TEST,
                                name='cifar10',
                                batch_size=FLAGS.batch_size,
                                training_mode='pretrain',
-                               use_cloud=False if FLAGS.use_gpu else True)
-
-        # strategy.experimental_distribute_dataset(val_ds)
+                               use_cloud=False if FLAGS.use_gpu else True,
+                               normalize=FLAGS.normalize)
 
         ds_info = tfds.builder(FLAGS.dataset).info
         steps_per_epoch = ds_info.splits['train'].num_examples // global_batch_size
@@ -165,9 +163,9 @@ def main(argv):
                              weight_decay_rate=1e-04,
                              exclude_from_weight_decay=['bias', 'BatchNormalization'])
         elif FLAGS.optimizer == 'adam':
-            optimizer = Adam(learning_rate=lr_fn)
+            optimizer = Adam(learning_rate=FLAGS.learning_rate)
         elif FLAGS.optimizer == 'sgd':
-            optimizer = SGD(learning_rate=lr_fn)
+            optimizer = SGD(learning_rate=FLAGS.learning_rate)
         elif FLAGS.optimizer == 'adamw':
             optimizer = AdamW(weight_decay=1e-06, learning_rate=FLAGS.learning_rate)
 
@@ -185,11 +183,13 @@ def main(argv):
     model.fit(train_ds,
               steps_per_epoch=steps_per_epoch,
               batch_size=global_batch_size,
-              epochs=50,
+              epochs=1000,
               validation_data=val_ds,
               validation_steps=validation_steps,
-              verbose=1,
-              callbacks=[ckpt_cb])
+              verbose=1)
+
+    model.save_weights(logdir + '/simclr_weights.ckpt')
+
 
 if __name__ == '__main__':
     app.run(main)
