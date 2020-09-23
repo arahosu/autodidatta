@@ -180,12 +180,12 @@ def main(argv):
     model.fit(train_ds,
               steps_per_epoch=steps_per_epoch,
               batch_size=global_batch_size,
-              epochs=1000,
+              epochs=FLAGS.train_epochs,
               validation_data=val_ds,
               validation_steps=validation_steps,
               verbose=1)
 
-    model.save_weights(logdir + '/simclr_weights.ckpt')
+    model.save_weights(FLAGS.logdir + '/simclr_weights.ckpt')
 
 
 if __name__ == '__main__':

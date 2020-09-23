@@ -8,13 +8,14 @@ flags.DEFINE_bool('normalize', False, 'set whether to normalize the images')
 
 # Training
 flags.DEFINE_string('train_mode', 'pretrain', 'set whether to pretrain(default) or finetune')
+flags.DEFINE_integer('train_epochs', 1000, 'Number of epochs to train the model')
 flags.DEFINE_enum('optimizer', 'adamw', ['lamb', 'adam', 'sgd', 'adamw'], 'lamb (default), adam')
 flags.DEFINE_integer('batch_size', 128, 'set batch size for pre-training.')
 flags.DEFINE_float('learning_rate', 1e-03, 'set learning rate for optimizer.')
 flags.DEFINE_float('weight_decay', 1e-04, 'set weight decay')
 
 # Finetuning
-flags.DEFINE_bool('linear', True, 'Set whether to run linear (Default) or non-linear evaluation protocol')
+flags.DEFINE_bool('linear_eval', True, 'Set whether to run linear (Default) or non-linear evaluation protocol')
 
 # Model specification
 flags.DEFINE_enum('backbone', 'resnet50', ['resnet50', 'vgg16', 'vgg19'], 'resnet50 (default)')

@@ -55,7 +55,7 @@ def main(argv):
 
         if FLAGS.linear_eval:
             evaluator = tf.keras.Sequential([
-                model.backbone,
+                model.backbone,  # It's actually fine to just call model, but for clarity sake, I'll leave it as it is
                 tfkl.Flatten(),
                 tfkl.Dropout(rate=0.2),
                 tfkl.Dense(10, activation='softmax')
