@@ -12,21 +12,24 @@ def random_apply(func, p, x):
 
     return image
 
-def multiplicative_random_brightness(image, max_delta):
+def random_brightness(image, max_delta, impl='v1'):
 
-    factor = tf.random.uniform([], tf.math.maximum(1.0 - max_delta, 0), 1.0 + max_delta)
-    image = image * factor
+    if impl == 'v2':
+        factor = tf.random.uniform([], tf.math.maximum(1.0 - max_delta, 0), 1.0 + max_delta)
+        image = image * factor
+    elif impl == 'v1':
+        image = tf.image.random_brightness(image, max_delta=max_delta)
 
     return image
 
-def color_jitter(image, strength=1.0):
+def color_jitter(image, strength=1.0, impl='v1'):
 
     brightness = 0.8 * strength
     contrast = 0.8 * strength
     saturation = 0.8 * strength
     hue = 0.2 * strength
 
-    image = multiplicative_random_brightness(image, brightness)
+    image = random_brightness(image, brightness, impl=impl) 
     image = tf.image.random_contrast(image, 1 - contrast, 1 + contrast)
     image = tf.image.random_saturation(image, 1 - saturation, 1 + saturation)
     image = tf.image.random_hue(image, hue)
