@@ -1,20 +1,9 @@
-# python3 -m Self-Supervised-Segmentation.self_supervised.TF2.models.byol.byol_pretrain
-
 import tensorflow as tf
-# import tensorflow.keras.layers as tfkl
+import tensorflow.keras.layers as tfkl
 from tensorflow_addons.optimizers import LAMB
 from tensorflow.keras.optimizers import Adam
 import numpy as np
 from itertools import cycle
-
-# JUST FOR DEBUGGING ON VSCODE 
-import os,sys,inspect
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-parentdir = os.path.dirname(parentdir)
-parentdir = os.path.dirname(parentdir)
-parentdir = os.path.dirname(parentdir)
-sys.path.insert(0,parentdir) 
 
 from self_supervised.TF2.models.networks.resnet50 import ResNet50
 from self_supervised.TF2.utils.losses import mse_loss
@@ -69,22 +58,10 @@ class EMA():
             else:
                 old_i.set_weights(ma_update_fn(old_i.get_weights(), new_i.get_weights()))
                 updated_weights.append(old_i)
- 
+
         return updated_weights
         # Same as above
         # return [ma_update_fn(old_i.get_weights(), new_i.get_weights()) for old_i, new_i in zip(old.layers, new.layers)]
-
-# class NetWrapper(tf.keras.Model):
-#     """ Initializes the online network """
-
-#     def __init__(self,
-#         net: tf.keras.Model,
-#         projection_size,
-#         projection_hidden_size,
-#         layer=hidden_layer):
-#         super(NetWrapper, self).__init__()
-#         self.net = net
-
 
 def MLP(name, hidden_size=4096, projection_size=256, in_shape=None):
     """ MLP head for projector and predictor """
@@ -92,11 +69,11 @@ def MLP(name, hidden_size=4096, projection_size=256, in_shape=None):
 
     if in_shape:
         model.add(tf.keras.Input(shape=in_shape))
-    model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(hidden_size))
-    model.add(tf.keras.layers.BatchNormalization())
-    model.add(tf.keras.layers.ReLU())
-    model.add(tf.keras.layers.Dense(projection_size))
+    model.add(tfkl.Flatten())
+    model.add(tfkl.Dense(hidden_size))
+    model.add(tfkl.BatchNormalization())
+    model.add(tfkl.ReLU())
+    model.add(tfkl.Dense(projection_size))
 
     return model
 
