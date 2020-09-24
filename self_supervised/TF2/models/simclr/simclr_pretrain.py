@@ -182,7 +182,6 @@ def main(argv):
 
     model.fit(train_ds,
               steps_per_epoch=steps_per_epoch,
-              batch_size=FLAGS.batch_size,
               epochs=FLAGS.train_epochs,
               validation_data=val_ds,
               validation_steps=validation_steps,
