@@ -18,7 +18,8 @@ from self_supervised.TF2.models.simclr.simclr_flags import FLAGS
 
 def get_projection_head(use_2D=True,
                         proj_head_dim=512,
-                        output_dim=128
+                        output_dim=128,
+                        num_layers=1
                         ):
 
     model = tf.keras.Sequential()
@@ -29,9 +30,11 @@ def get_projection_head(use_2D=True,
         model.add(tfkl.GlobalAveragePooling3D())
 
     model.add(tfkl.Flatten())
-    model.add(tfkl.Dense(proj_head_dim, use_bias=True))
-    model.add(tfkl.BatchNormalization())
-    model.add(tfkl.ReLU())
+
+    for _ in range(num_layers):
+        model.add(tfkl.Dense(proj_head_dim, use_bias=True))
+        model.add(tfkl.BatchNormalization())
+        model.add(tfkl.ReLU())
 
     model.add(tfkl.Dense(output_dim, use_bias=False))
 
@@ -121,7 +124,6 @@ def main(argv):
     strategy = setup_accelerator(FLAGS.use_gpu,
                                  FLAGS.num_cores,
                                  FLAGS.tpu)
-    global_batch_size = FLAGS.num_cores * FLAGS.batch_size
 
     # load datasets:
     if FLAGS.dataset == 'cifar10':
@@ -140,8 +142,8 @@ def main(argv):
                                normalize=FLAGS.normalize)
 
         ds_info = tfds.builder(FLAGS.dataset).info
-        steps_per_epoch = ds_info.splits['train'].num_examples // global_batch_size
-        validation_steps = ds_info.splits['test'].num_examples // global_batch_size
+        steps_per_epoch = ds_info.splits['train'].num_examples // FLAGS.batch_size
+        validation_steps = ds_info.splits['test'].num_examples // FLAGS.batch_size
         ds_shape = (32, 32, 3)
 
     with strategy.scope():
@@ -151,7 +153,8 @@ def main(argv):
                             pooling=None)
 
         model = SimCLR(backbone=backbone,
-                       projection=get_projection_head(),
+                       projection=get_projection_head(proj_head_dim=FLAGS.proj_head_dim,
+                                                      num_layers=FLAGS.num_head_layers),
                        loss_temperature=FLAGS.loss_temperature)
 
         if FLAGS.optimizer == 'lamb':
@@ -179,13 +182,13 @@ def main(argv):
 
     model.fit(train_ds,
               steps_per_epoch=steps_per_epoch,
-              batch_size=global_batch_size,
+              batch_size=FLAGS.batch_size,
               epochs=FLAGS.train_epochs,
               validation_data=val_ds,
               validation_steps=validation_steps,
               verbose=1)
 
-    model.save_weights(FLAGS.logdir + '/simclr_weights.ckpt')
+    model.save_weights(logdir + '/simclr_weights.ckpt')
 
 
 if __name__ == '__main__':

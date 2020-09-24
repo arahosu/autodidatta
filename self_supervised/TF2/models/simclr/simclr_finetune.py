@@ -17,8 +17,6 @@ def main(argv):
     strategy = setup_accelerator(FLAGS.use_gpu,
                                  FLAGS.num_cores,
                                  FLAGS.tpu)
-    global_batch_size = FLAGS.num_cores * FLAGS.batch_size
-
     # load datasets:
     if FLAGS.dataset == 'cifar10':
         train_ds = load_input_fn(split=tfds.Split.TRAIN,
@@ -36,8 +34,8 @@ def main(argv):
                                normalize=FLAGS.normalize)
 
         ds_info = tfds.builder(FLAGS.dataset).info
-        steps_per_epoch = ds_info.splits['train'].num_examples // global_batch_size
-        validation_steps = ds_info.splits['test'].num_examples // global_batch_size
+        steps_per_epoch = ds_info.splits['train'].num_examples // FLAGS.batch_size
+        validation_steps = ds_info.splits['test'].num_examples // FLAGS.batch_size
         ds_shape = (32, 32, 3)
 
     with strategy.scope():
@@ -53,7 +51,7 @@ def main(argv):
         model.load_weights(FLAGS.weights).expect_partial()
         model.trainable = False  # Freeze the resnet weights
 
-        if FLAGS.linear_eval:
+        if FLAGS.eval_linear:
             evaluator = tf.keras.Sequential([
                 model.backbone,  # It's actually fine to just call model, but for clarity sake, I'll leave it as it is
                 tfkl.Flatten(),
@@ -80,8 +78,8 @@ def main(argv):
 
     evaluator.fit(train_ds,
                   steps_per_epoch=steps_per_epoch,
-                  batch_size=global_batch_size,
-                  epochs=200,
+                  batch_size=FLAGS.batch_size,
+                  epochs=FLAGS.eval_epochs,
                   validation_data=val_ds,
                   validation_steps=validation_steps)
 

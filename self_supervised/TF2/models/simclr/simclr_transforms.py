@@ -120,7 +120,7 @@ def color_jitter_rand(image,
                     lambda: tf.cond(tf.less(i, 3), saturation_foo, hue_foo))
         return x
 
-    perm = tf.random_shuffle(tf.range(4))
+    perm = tf.random.shuffle(tf.range(4))
     for i in range(4):
         image = apply_transform(perm[i], image)
         image = tf.clip_by_value(image, 0., 1.)
