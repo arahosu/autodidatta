@@ -104,7 +104,7 @@ class BYOL(tf.keras.Model):
     def cosine_similarity(self, x, y):
         x = tf.linalg.l2_normalize(x, axis=-1)
         y = tf.linalg.l2_normalize(y, axis=-1)
-        return 2 - 2 * tf.math.reduce_sum(x * y, axis=-1)
+        return tf.math.reduce_mean(tf.math.reduce_sum(x * y, axis=-1))
 
     def compute_loss(self, data):
         x, y = data
@@ -117,10 +117,10 @@ class BYOL(tf.keras.Model):
         _, target_out_1, _ = self.target_network(view_1, training=True)
         _, target_out_2, _ = self.target_network(view_2, training=True)
 
-        loss = self.cosine_similarity(online_out_1, target_out_2)
-        loss += self.cosine_similarity(online_out_2, target_out_1)
+        loss = -2 * self.cosine_similarity(online_out_1, target_out_2)
+        loss += -2 * self.cosine_similarity(online_out_2, target_out_1)
 
-        return tf.math.reduce_mean(loss)
+        return loss
 
     def save_weights(self, filepath):
         self.online_network.save_weights(filepath=filepath)
