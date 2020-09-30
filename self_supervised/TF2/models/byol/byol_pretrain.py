@@ -188,7 +188,7 @@ def main(argv):
               epochs=FLAGS.train_epochs,
               callbacks=[movingavg_cb])
 
-    model.save_weights(logdir + '/byol_weights.ckpt')
+    model.save_weights(os.path.join(logdir, 'byol_weights.ckpt'))
 
 if __name__ == '__main__':
     app.run(main)

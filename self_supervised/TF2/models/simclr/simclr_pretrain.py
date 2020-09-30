@@ -176,7 +176,7 @@ def main(argv):
     # Define checkpoints
     time = datetime.now().strftime("%Y%m%d-%H%M%S")
     logdir = os.path.join(FLAGS.logdir, time)
-    ckpt_cb = tf.keras.callbacks.ModelCheckpoint(logdir + '/simclr_weights.{epoch:03d}.ckpt',
+    ckpt_cb = tf.keras.callbacks.ModelCheckpoint(os.path.join(logdir, 'simclr_weights.{epoch:03d}.ckpt'),
                                                  save_best_only=False,
                                                  save_weights_only=True)
 
