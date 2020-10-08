@@ -11,7 +11,7 @@ import os
 
 from self_supervised.TF2.models.networks.resnet50 import ResNet50
 from self_supervised.TF2.utils.accelerator import setup_accelerator
-from self_supervised.TF2.utils.losses import nt_xent_loss, nt_xent_loss_v2
+from self_supervised.TF2.utils.losses import nt_xent_loss
 from self_supervised.TF2.dataset.cifar10 import load_input_fn
 from self_supervised.TF2.models.simclr.simclr_flags import FLAGS
 
@@ -114,7 +114,7 @@ class SimCLR(tf.keras.Model):
 
         loss = self.shared_step(data, training=False)
 
-        return {'_loss': loss}
+        return {'loss': loss}
 
 def main(argv):
 
@@ -176,7 +176,7 @@ def main(argv):
     # Define checkpoints
     time = datetime.now().strftime("%Y%m%d-%H%M%S")
     logdir = os.path.join(FLAGS.logdir, time)
-    ckpt_cb = tf.keras.callbacks.ModelCheckpoint(logdir + '/simclr_weights.{epoch:03d}.ckpt',
+    ckpt_cb = tf.keras.callbacks.ModelCheckpoint(os.path.join(logdir, 'simclr_weights.{epoch:03d}.ckpt'),
                                                  save_best_only=False,
                                                  save_weights_only=True)
 
