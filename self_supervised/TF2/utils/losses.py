@@ -18,6 +18,8 @@ def nt_xent_loss(out_i, out_j, temperature):
     # Positive Similiarity
     pos = tf.math.exp(tf.math.reduce_sum(out_i * out_j, axis=-1) / temperature)
     pos = tf.concat([pos, pos], axis=0)
+
+    # Loss
     loss = tf.math.reduce_mean(-tf.math.log(pos / neg))
 
     return loss

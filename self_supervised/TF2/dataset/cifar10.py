@@ -5,30 +5,29 @@ from self_supervised.TF2.models.simclr.simclr_transforms import get_preprocess_f
 
 def load_input_fn(split,
                   batch_size,
-                  name,
                   training_mode,
-                  use_cloud=True,
                   normalize=False,
                   drop_remainder=True,
                   proportion=1.0):
 
-    """Prototype CIFAR dataset loader for training or testing.
+    """CIFAR10 dataset loader for training or testing.
     https://github.com/google/uncertainty-baselines/blob/master/baselines/cifar/utils.py
     Args:
-    split: tfds.Split.
-    batch_size: The global batch size to use.
-    name: A string indicates whether it is cifar10 or cifar100.
-    normalize: Whether to apply mean-std normalization on features.
-    drop_remainder: bool.
-    proportion: float, the proportion of dataset to be used.
+    split (str): 'train' for training split, 'test' for test split
+    batch_size (int): The global batch size to use.
+    training_mode (str): 'pretrain' for training, 'finetune' for fine-tuning
+    normalize (bool): Whether to apply mean-std normalization on features.
+    drop_remainder (bool): Whether to drop the last batch if it has fewer than batch_size elements
+    proportion (float): The proportion of dataset to be used.
     Returns:
-    Input function which returns a locally-sharded dataset batch.
+    Input function which returns a cifar10 dataset.
     """
+
+    name = 'cifar10'
     ds_info = tfds.builder(name).info
-    image_shape = ds_info.features['image'].shape
     dataset_size = ds_info.splits['train'].num_examples
 
-    if split == tfds.Split.TRAIN:
+    if split == 'train':
         is_training = True
     else:
         is_training = False
@@ -37,10 +36,7 @@ def load_input_fn(split,
     preprocess_fn_finetune = get_preprocess_fn(is_training=is_training, is_pretrain=False)
 
     def preprocess(image, label):
-        """Image preprocessing function. Augmentations should be written
-        as a separate function"""
-
-        image = tf.image.convert_image_dtype(image, tf.float32)  # THIS STEP IS CRITICAL. DO NOT USE tf.cast
+        image = tf.image.convert_image_dtype(image, tf.float32)
         label = tf.cast(label, tf.float32)
 
         if normalize:
@@ -54,26 +50,19 @@ def load_input_fn(split,
             image = tf.concat(xs, -1)
         else:
             image = preprocess_fn_finetune(image)
-
         return image, label
 
-    if proportion == 1.0:
-        if use_cloud:
-            dataset = tfds.load(name, split=split, data_dir='gs://cifar10_baseline/', as_supervised=True)
-        else:
-            dataset = tfds.load(name, split=split, data_dir='C:/Users/Joonsu/tensorflow_datasets/', as_supervised=True)
+    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
+    if split == 'train':
+        num_examples = int(len(x_train) * proportion)
+        (x_train_split, y_train_split) = (x_train[:num_examples,...], y_train[:num_examples,:])
+        dataset = tf.data.Dataset.from_tensor_slices((x_train_split, y_train_split))
     else:
-        new_name = '{}:3.*.*'.format(name)
-        if split == tfds.Split.TRAIN:
-            new_split = 'train[:{}%]'.format(int(100 * proportion))
-        else:
-            new_split = 'test[:{}%]'.format(int(100 * proportion))
-        if use_cloud:
-            dataset = tfds.load(new_name, split=new_split, data_dir='gs://cifar10_baseline/', as_supervised=True)
-        else:
-            dataset = tfds.load(new_name, split=new_split, data_dir='C:/Users/Joonsu/tensorflow_datasets/', as_supervised=True)
+        num_examples = int(len(x_test) * proportion)
+        (x_test_split, y_test_split) = (x_test[:num_examples,...], y_test[:num_examples,:])
+        dataset = tf.data.Dataset.from_tensor_slices((x_test_split, y_test_split))
 
-    if split == tfds.Split.TRAIN:
+    if split == 'train':
         dataset = dataset.shuffle(buffer_size=dataset_size).repeat()
 
     dataset = dataset.map(preprocess, num_parallel_calls=tf.data.experimental.AUTOTUNE)
