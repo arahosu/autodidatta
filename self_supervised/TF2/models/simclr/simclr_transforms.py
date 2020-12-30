@@ -5,17 +5,21 @@ from self_supervised.TF2.models.simclr.simclr_flags import FLAGS
 def random_apply(func, p, x):
 
     image = tf.cond(tf.less(
-                    tf.random.uniform([], minval=0, maxval=1, dtype=tf.float32),
+                    tf.random.uniform([],
+                    minval=0, maxval=1, dtype=tf.float32),
                     tf.cast(p, tf.float32)),
                     lambda: func(x),
                     lambda: x)
 
     return image
 
-def random_brightness(image, max_delta, impl='v1'):
+def random_brightness(image,
+                      max_delta,
+                      impl='v1'):
 
     if impl == 'v2':
-        factor = tf.random.uniform([], tf.math.maximum(1.0 - max_delta, 0), 1.0 + max_delta)
+        factor = tf.random.uniform([], 
+            tf.math.maximum(1.0 - max_delta, 0), 1.0 + max_delta)
         image = image * factor
     elif impl == 'v1':
         image = tf.image.random_brightness(image, max_delta=max_delta)
@@ -30,9 +34,11 @@ def color_jitter(image, strength=1.0, random_order=True, impl='v1'):
     hue = 0.2 * strength
 
     if random_order:
-        return color_jitter_rand(image, brightness, contrast, saturation, hue, impl=impl)
+        return color_jitter_rand(
+            image, brightness, contrast, saturation, hue, impl=impl)
     else:
-        return color_jitter_nonrand(image, brightness, contrast, saturation, hue, impl=impl)
+        return color_jitter_nonrand(
+            image, brightness, contrast, saturation, hue, impl=impl)
 
 def color_jitter_nonrand(image,
                          brightness=0,
@@ -55,7 +61,8 @@ def color_jitter_nonrand(image,
     def apply_transform(i, x, brightness, contrast, saturation, hue):
         """Apply the i-th transformation."""
         if brightness != 0 and i == 0:
-            x = random_brightness(x, max_delta=brightness, impl=impl)
+            x = random_brightness(
+                x, max_delta=brightness, impl=impl)
         elif contrast != 0 and i == 1:
             x = tf.image.random_contrast(
                 x, lower=1 - contrast, upper=1 + contrast)
@@ -67,7 +74,8 @@ def color_jitter_nonrand(image,
         return x
 
     for i in range(4):
-        image = apply_transform(i, image, brightness, contrast, saturation, hue)
+        image = apply_transform(i, 
+            image, brightness, contrast, saturation, hue)
         image = tf.clip_by_value(image, 0., 1.)
     return image
 
@@ -95,29 +103,35 @@ def color_jitter_rand(image,
             if brightness == 0:
                 return x
             else:
-                return random_brightness(x, max_delta=brightness, impl=impl)
+                return random_brightness(
+                    x, max_delta=brightness, impl=impl)
 
         def contrast_foo():
             if contrast == 0:
                 return x
             else:
-                return tf.image.random_contrast(x, lower=1 - contrast, upper=1 + contrast)
+                return tf.image.random_contrast(
+                    x, lower=1 - contrast, upper=1 + contrast)
 
         def saturation_foo():
             if saturation == 0:
                 return x
             else:
-                return tf.image.random_saturation(x, lower=1 - saturation, upper=1 + saturation)
+                return tf.image.random_saturation(
+                    x, lower=1 - saturation, upper=1 + saturation)
 
         def hue_foo():
             if hue == 0:
                 return x
             else:
-                return tf.image.random_hue(x, max_delta=hue)
+                return tf.image.random_hue(
+                    x, max_delta=hue)
 
         x = tf.cond(tf.less(i, 2),
-                    lambda: tf.cond(tf.less(i, 1), brightness_foo, contrast_foo),
-                    lambda: tf.cond(tf.less(i, 3), saturation_foo, hue_foo))
+                    lambda: tf.cond(
+                        tf.less(i, 1), brightness_foo, contrast_foo),
+                    lambda: tf.cond(
+                        tf.less(i, 3), saturation_foo, hue_foo))
         return x
 
     perm = tf.random.shuffle(tf.range(4))
