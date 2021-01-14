@@ -8,13 +8,16 @@ from tensorflow.keras.regularizers import l1
 from absl import app
 from datetime import datetime
 import os
+from functools import partial
 
-from self_supervised.TF2.models.networks.resnet import ResNet50
+from self_supervised.TF2.models.networks.resnet import ResNet18, ResNet34, ResNet50
+from self_supervised.TF2.models.networks.vgg import VGG_UNet_Encoder, VGG_UNet_Decoder
+
 from self_supervised.TF2.utils.accelerator import setup_accelerator
 from self_supervised.TF2.utils.losses import nt_xent_loss
 from self_supervised.TF2.dataset.cifar10 import load_input_fn
+from self_supervised.TF2.dataset.oai import load_dataset
 from self_supervised.TF2.models.simclr.simclr_flags import FLAGS
-
 
 def projection_head(proj_head_dim=512,
                     output_dim=128,
@@ -39,38 +42,22 @@ class SimCLR(tf.keras.Model):
     def __init__(self,
                  backbone,
                  projection,
-                 loss_temperature=0.5,
-                 online_ft=False,
-                 linear_ft=False):
+                 classifier=None,
+                 loss_temperature=0.5):
 
         super(SimCLR, self).__init__()
 
         self.backbone = backbone
         self.projection = projection
+        self.classsifier = classifier
         self.loss_temperature = loss_temperature
-        self.online_ft = online_ft
-
-        if online_ft:
-            if linear_ft:
-                self.classifier = tf.keras.Sequential([
-                            tfkl.Flatten(),
-                            tfkl.Dense(10, activation='softmax')
-                        ], name='classifier')
-            else:
-                self.classifier = tf.keras.Sequential([
-                            tfkl.Flatten(),
-                            tfkl.Dense(512, use_bias=False),
-                            tfkl.BatchNormalization(),
-                            tfkl.ReLU(),
-                            tfkl.Dense(10, activation='softmax')
-                        ], name='classifier')
 
     def build(self, input_shape):
 
         self.backbone.build(input_shape)
         if self.projection is not None:
             self.projection.build(self.backbone.compute_output_shape(input_shape))
-        if self.online_ft:
+        if self.classifier is not None:
             self.classifier.build(self.backbone.compute_output_shape(input_shape))
 
         self.built = True
@@ -84,8 +71,8 @@ class SimCLR(tf.keras.Model):
     def compile(self, loss_fn=nt_xent_loss, ft_optimizer=None, **kwargs):
         super(SimCLR, self).compile(**kwargs)
         self.loss_fn = loss_fn
-        if self.online_ft:
-            assert ft_optimizer is not None, 'ft_optimizer should not be None if self.online_ft is True'
+        if self.classifier is not None:
+            assert ft_optimizer is not None, 'ft_optimizer should not be None if self.classifier is not None'
             self.ft_optimizer = ft_optimizer
 
     def compute_output_shape(self, input_shape):
@@ -124,8 +111,8 @@ class SimCLR(tf.keras.Model):
         trainable_variables = self.trainable_variables
         grads = tape.gradient(loss, trainable_variables)
         self.optimizer.apply_gradients(zip(grads, trainable_variables))
-        
-        if self.online_ft:
+
+        if self.classifier is not None:
             self.finetune_step(data)
             metrics_results = {m.name: m.result() for m in self.metrics}
             return {'similarity_loss': loss, **metrics_results}
@@ -133,7 +120,7 @@ class SimCLR(tf.keras.Model):
             return {'similarity_loss': loss}
 
     def finetune_step(self, data):
-        
+
         x, y = data
         num_channels = int(x.shape[-1] // 2)
         view = x[..., :num_channels]
@@ -161,7 +148,7 @@ class SimCLR(tf.keras.Model):
             metric_results = {m.name: m.result() for m in self.metrics}
             return {'similarity_loss': sim_loss, **metric_results}
         else:
-            return {'loss': loss}
+            return {'loss': sim_loss}
 
 def main(argv):
 
@@ -189,13 +176,46 @@ def main(argv):
         validation_steps = ds_info.splits['test'].num_examples // FLAGS.batch_size
         ds_shape = (32, 32, 3)
 
+    elif FLAGS.dataset == 'oai':
+        train_ds, val_ds = load_dataset(batch_size=FLAGS.batch_size,
+                                        dataset_dir='gs://oai-challenge-dataset/tfrecords',
+                                        training_mode='pretrain')
+
+        steps_per_epoch = 19200 // FLAGS.batch_size
+        validation_steps = 4480 // FLAGS.batch_size
+        ds_shape = (288, 288, 1)
+
     with strategy.scope():
         # load model
-        model = SimCLR(backbone=ResNet50(input_shape=ds_shape),
+        if FLAGS.backbone == 'resnet50':
+            backbone = ResNet50(input_shape=ds_shape)
+        elif FLAGS.backbone == 'resnet34':
+            backbone = ResNet34(input_shape=ds_shape)
+        elif FLAGS.backbone == 'resnet18':
+            backbone = ResNet18(input_shape=ds_shape)
+        elif FLAGS.backbone == 'vgg_unet':
+            backbone = VGG_UNet_Encoder(input_shape=ds_shape)
+
+        # load model for downstream task evaluation
+        if FLAGS.dataset == 'cifar10':
+            if FLAGS.eval_linear:
+                classifier = tf.keras.Sequential([tfkl.Flatten(),
+                                                  tfkl.Dense(10, activation='softmax')],
+                                                 name='classifier')
+            else:
+                classifier = tf.keras.Sequential([tfkl.Flatten(),
+                                                  tfkl.Dense(512, use_bias=False),
+                                                  tfkl.BatchNormalization(),
+                                                  tfkl.ReLU(),
+                                                  tfkl.Dense(10, activation='softmax')],
+                                                 name='classifier')
+        elif FLAGS.dataset in ['oai', 'brats']:
+            classifier = None
+
+        model = SimCLR(backbone=backbone,
                        projection=projection_head(),
-                       loss_temperature=0.5,
-                       online_ft=True,
-                       linear_ft=False)
+                       classifier=classifier, 
+                       loss_temperature=0.5)
 
         if FLAGS.optimizer == 'lamb':
             optimizer = LAMB(learning_rate=FLAGS.learning_rate,
@@ -213,7 +233,7 @@ def main(argv):
                       ft_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-03),
                       loss=tf.keras.losses.sparse_categorical_crossentropy,
                       metrics=['acc'])
-  
+
         model.build((None, *ds_shape))
         model.backbone.summary()
         model.projection.summary()

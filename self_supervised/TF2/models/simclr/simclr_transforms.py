@@ -5,8 +5,7 @@ from self_supervised.TF2.models.simclr.simclr_flags import FLAGS
 def random_apply(func, p, x):
 
     image = tf.cond(tf.less(
-                    tf.random.uniform([],
-                    minval=0, maxval=1, dtype=tf.float32),
+                    tf.random.uniform([], minval=0, maxval=1, dtype=tf.float32),
                     tf.cast(p, tf.float32)),
                     lambda: func(x),
                     lambda: x)
@@ -18,8 +17,7 @@ def random_brightness(image,
                       impl='v1'):
 
     if impl == 'v2':
-        factor = tf.random.uniform([], 
-            tf.math.maximum(1.0 - max_delta, 0), 1.0 + max_delta)
+        factor = tf.random.uniform([], tf.math.maximum(1.0 - max_delta, 0), 1.0 + max_delta)
         image = image * factor
     elif impl == 'v1':
         image = tf.image.random_brightness(image, max_delta=max_delta)
@@ -74,8 +72,7 @@ def color_jitter_nonrand(image,
         return x
 
     for i in range(4):
-        image = apply_transform(i, 
-            image, brightness, contrast, saturation, hue)
+        image = apply_transform(i, image, brightness, contrast, saturation, hue)
         image = tf.clip_by_value(image, 0., 1.)
     return image
 

@@ -1,8 +1,8 @@
 from absl import flags
 
 # Dataset
-flags.DEFINE_enum('dataset', 'cifar10', ['cifar10', 'BraTS', 'OAI'], 'cifar10 (default), BraTS, OAI')
-flags.DEFINE_integer('image_size', 32, 'set image size for training and evaluation')
+flags.DEFINE_enum('dataset', 'oai', ['cifar10', 'brats', 'oai'], 'cifar10 (default), BraTS, oai')
+flags.DEFINE_integer('image_size', 288, 'set image size for training and evaluation')
 flags.DEFINE_string('dataset_dir', '.', 'set directory of your dataset')
 flags.DEFINE_bool('normalize', False, 'set whether to normalize the images')
 
@@ -21,9 +21,9 @@ flags.DEFINE_bool('eval_linear', True, 'Set whether to run linear (Default) or n
 flags.DEFINE_integer('eval_epochs', 200, 'Number of epochs to finetune the model')
 
 # Model specification
-flags.DEFINE_enum('backbone', 'resnet50', ['resnet50', 'vgg16', 'vgg19'], 'resnet50 (default)')
+flags.DEFINE_enum('backbone', 'resnet18', ['resnet50', 'resnet34', 'resnet18'], 'resnet50 (default)')
 flags.DEFINE_bool('use_2D', True, 'set whether to train on 2D or 3D data. Required for BraTS and OAI only')
-flags.DEFINE_string('logdir', '/home/Joonsu/Self-Supervised-Segmentation/', 'Directory for where the weights are being saved')
+flags.DEFINE_string('logdir', 'gs://oai-challenge-dataset/weights/', 'Directory for where the weights are being saved')
 flags.DEFINE_string('weights', None, 'Directory for the trained model weights. Only used for finetuning')
 flags.DEFINE_float('loss_temperature', 0.5, 'set temperature for loss function')
 flags.DEFINE_bool('use_gpu', 'False', 'set whether to use GPU')
