@@ -24,7 +24,7 @@ def basic_block(x, filters, kernel_size=3, stride=1, conv_shortcut=True, name=No
             axis=bn_axis, epsilon=1.001e-5, name=name + '_0_bn')(shortcut)
     else:
         shortcut = x
-  
+
     x = tfkl.Conv2D(filters, kernel_size, 
                     strides=stride, padding='same',
                     kernel_initializer='he_normal',
@@ -60,8 +60,8 @@ def bottleneck(x, filters, kernel_size=3, stride=1, conv_shortcut=True, name=Non
 
     if conv_shortcut:
         shortcut = tfkl.Conv2D(4 * filters, 1,
-                                kernel_initializer='he_normal',
-                                strides=stride, name=name + '_0_conv')(x)
+                               kernel_initializer='he_normal',
+                               strides=stride, name=name + '_0_conv')(x)
         shortcut = tfkl.BatchNormalization(
             axis=bn_axis, epsilon=1.001e-5, name=name + '_0_bn')(shortcut)
     else:
@@ -127,8 +127,8 @@ def ResNet(input_shape,
 
     if height <= 32 or width <= 32:
         # CIFAR stem
-        x =  tfkl.ZeroPadding2D(padding=1,
-                                name='conv1_pad')(img_input)
+        x = tfkl.ZeroPadding2D(padding=1,
+                               name='conv1_pad')(img_input)
         x = tfkl.Conv2D(64, 3,
                         strides=1,
                         kernel_initializer='he_normal',
@@ -138,7 +138,7 @@ def ResNet(input_shape,
         x = tfkl.Activation('relu', name='conv1_relu')(x)
     else:
         x = tfkl.ZeroPadding2D(padding=3,
-                                name='conv1_pad')(img_input)
+                               name='conv1_pad')(img_input)
         x = tfkl.Conv2D(64, 7,
                         strides=2,
                         kernel_initializer='he_normal',
@@ -157,7 +157,7 @@ def ResNet(input_shape,
 
 def ResNet18(input_shape,
              name='resnet18'):
-  
+
     def stack_fn(x):
         x = basic_stack(x, 64, 2, stride1=1, name='conv2')
         x = basic_stack(x, 128, 2, name='conv3')
@@ -167,8 +167,8 @@ def ResNet18(input_shape,
     return ResNet(input_shape, stack_fn, name)
 
 def ResNet34(input_shape,
-             name='resnet18'):
-  
+             name='resnet34'):
+
     def stack_fn(x):
         x = basic_stack(x, 64, 3, stride1=1, name='conv2')
         x = basic_stack(x, 128, 4, name='conv3')
@@ -179,7 +179,7 @@ def ResNet34(input_shape,
 
 def ResNet50(input_shape,
              name='resnet50'):
-  
+
     def stack_fn(x):
         x = bottleneck_stack(x, 64, 3, stride1=1, name='conv2')
         x = bottleneck_stack(x, 128, 4, name='conv3')
