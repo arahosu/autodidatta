@@ -23,8 +23,8 @@ def get_augmentations_2d(patch_size, is_training):
             A.VerticalFlip(p=0.5),
             A.ElasticTransform(),
             A.RandomRotate90(),
-            A.GaussNoise(),
-            A.RandomGamma()
+            # A.GaussNoise(),
+            # A.RandomGamma()
         ])
     else:
         return A.Compose([
