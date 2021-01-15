@@ -116,9 +116,7 @@ def add_background(image):
     image_background = tf.cast(image_background, dtype=tf.float32)
     return tf.concat([image_background, image], axis=-1)
 
-def parse_fn_2d(example_proto,
-                is_training,
-                training_mode):
+def parse_fn_2d(example_proto):
 
     features = {
         'height': tf.io.FixedLenFeature([], tf.int64),
@@ -131,34 +129,47 @@ def parse_fn_2d(example_proto,
     # Parse the input tf.Example proto using the dictionary above.
     image_features = tf.io.parse_single_example(example_proto, features)
     image_raw = tf.io.decode_raw(image_features['image_raw'], tf.float32)
-    image = tf.cast(tf.reshape(image_raw, [384, 384, 1]), tf.float32)
+    image = tf.cast(tf.reshape(image_raw, [image_features['height'], image_features['width'], 1]), tf.float32)
 
-    seg_raw = tf.io.decode_raw(image_features['label_raw'], tf.int16)
-    seg = tf.reshape(seg_raw, [384, 384, 6])
+    seg_raw = tf.io.decode_raw(image_features['label_raw'], tf.int8)
+    seg = tf.reshape(seg_raw, [image_features['height'], image_features['width'], image_features['num_channels']])
     seg = tf.cast(seg, tf.float32)
+    
+    tf.debugging.check_numerics(image, "Invalid value in your input!")
+    tf.debugging.check_numerics(seg, "Invalid value in your label!")
 
-    preprocess_fn = get_augmentations_2d([288, 288], is_training)
+    return image, seg
 
-    def aug_fn(image, mask):
-        data = {"image": image, "mask": mask}
-        aug = preprocess_fn(**data)
+def aug_fn_2d(image, label,
+              training_mode,
+              is_training):
+    
+    def process_data(image, label, is_training):
+        preprocess_fn = get_augmentations_2d([384, 384], is_training)
+        aug = preprocess_fn(image=image, mask=label)
         aug_img, aug_seg = aug["image"], aug["mask"]
+
         return aug_img, aug_seg
 
-    def process_data(image, mask):
-        aug_img, aug_seg = tf.py_function(func=aug_fn, inp=[image, mask], Tout=tf.float32)
+    def tf_fn(image, label, is_training):
+        aug_img, aug_seg = tf.numpy_function(process_data, [image, label, is_training], [tf.float32, tf.float32])
+        return aug_img, aug_seg
 
     if training_mode == 'pretrain':
-        image1, seg1 = process_data(image, seg)
-        image2, seg2 = process_data(image, seg)
+        image1, seg1 = tf_fn(image, label, is_training)
+        image2, seg2 = tf_fn(image, label, is_training)
 
         image = tf.concat([image1, image2], -1)
         seg = tf.concat([add_background(seg1), add_background(seg2)], -1)
         return (image, seg)
     else:
-        image, seg = process_data(image, seg)
+        image, seg = tf_fn(image, label, is_training)
         seg = add_background(seg)
         return (image, seg)
+
+def tf_fn(image, label, training_mode, is_training):
+    aug_img, aug_seg = tf.numpy_function(func=aug_fn_2d, inp=[image, label, training_mode, is_training], Tout=tf.float32)
+    return aug_img, aug_seg
 
 def read_tfrecord(tfrecords_dir,
                   batch_size,
@@ -186,11 +197,10 @@ def read_tfrecord(tfrecords_dir,
     if is_training:
         dataset = dataset.shuffle(buffer_size=buffer_size)
 
-    parser = partial(parse_fn,
-                     is_training=is_training,
-                     training_mode=training_mode)
-
-    dataset = dataset.map(map_func=parser, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.map(map_func=parse_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    
+    dataset = dataset.map(partial(aug_fn_2d, training_mode=training_mode, is_training=is_training),
+                          num_parallel_calls=tf.data.experimental.AUTOTUNE)
     dataset = dataset.batch(batch_size, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
 
     # optimise dataset performance
@@ -206,7 +216,7 @@ def read_tfrecord(tfrecords_dir,
 def load_dataset(batch_size,
                  dataset_dir,
                  training_mode,
-                 buffer_size=1000):
+                 buffer_size=5000):
 
     """Function for loading and parsing dataset
     """
@@ -230,3 +240,13 @@ def load_dataset(batch_size,
                              )
 
     return train_ds, valid_ds
+
+if __name__ == '__main__':
+    
+    train_ds, val_ds = load_dataset(batch_size=256,
+                                    dataset_dir='gs://oai-challenge-dataset/tfrecords/',
+                                    training_mode='pretrain')
+
+    for image, label in val_ds:
+        print(image.shape)
+        print(label.shape)
