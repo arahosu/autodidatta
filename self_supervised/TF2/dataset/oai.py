@@ -5,7 +5,8 @@ import os
 import numpy as np
 from functools import partial
 
-from self_supervised.TF2.aug.oai_transform import get_augmentations_2d
+from self_supervised.TF2.aug.oai_transform import get_preprocess_fn
+
 
 def _bytes_feature(value):
     """Returns a bytes_list from a string / byte."""
@@ -13,13 +14,16 @@ def _bytes_feature(value):
         value = value.numpy()  # BytesList won't unpack a string from an EagerTensor.
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
+
 def _float_feature(value):
     """Returns a float_list from a float /p double."""
     return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
 
+
 def _int64_feature(value):
     """Returns an int64_list from a bool / enum / int / uint."""
     return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+
 
 def create_OAI_challenge_dataset(data_folder,
                                  tfrecord_directory,
@@ -116,7 +120,10 @@ def add_background(image):
     image_background = tf.cast(image_background, dtype=tf.float32)
     return tf.concat([image_background, image], axis=-1)
 
-def parse_fn_2d(example_proto):
+
+def parse_fn_2d(example_proto,
+                training_mode,
+                is_training):
 
     features = {
         'height': tf.io.FixedLenFeature([], tf.int64),
@@ -129,47 +136,35 @@ def parse_fn_2d(example_proto):
     # Parse the input tf.Example proto using the dictionary above.
     image_features = tf.io.parse_single_example(example_proto, features)
     image_raw = tf.io.decode_raw(image_features['image_raw'], tf.float32)
-    image = tf.cast(tf.reshape(image_raw, [image_features['height'], image_features['width'], 1]), tf.float32)
+    image = tf.cast(tf.reshape(image_raw, [384, 384, 1]), tf.float32)
 
     seg_raw = tf.io.decode_raw(image_features['label_raw'], tf.int8)
-    seg = tf.reshape(seg_raw, [image_features['height'], image_features['width'], image_features['num_channels']])
+    seg = tf.reshape(seg_raw, [384, 384, 6])
     seg = tf.cast(seg, tf.float32)
-    
+
     tf.debugging.check_numerics(image, "Invalid value in your input!")
     tf.debugging.check_numerics(seg, "Invalid value in your label!")
-
-    return image, seg
-
-def aug_fn_2d(image, label,
-              training_mode,
-              is_training):
     
-    def process_data(image, label, is_training):
-        preprocess_fn = get_augmentations_2d([384, 384], is_training)
-        aug = preprocess_fn(image=image, mask=label)
-        aug_img, aug_seg = aug["image"], aug["mask"]
-
-        return aug_img, aug_seg
-
-    def tf_fn(image, label, is_training):
-        aug_img, aug_seg = tf.numpy_function(process_data, [image, label, is_training], [tf.float32, tf.float32])
-        return aug_img, aug_seg
+    preprocess_fn_pretrain = get_preprocess_fn(
+        is_training=is_training, is_pretrain=True)
+    preprocess_fn_finetune = get_preprocess_fn(
+        is_training=is_training, is_pretrain=False)
 
     if training_mode == 'pretrain':
-        image1, seg1 = tf_fn(image, label, is_training)
-        image2, seg2 = tf_fn(image, label, is_training)
+        image1, seg1 = preprocess_fn_pretrain(
+            image=image, mask=seg)
+        image2, seg2 = preprocess_fn_pretrain(
+            image=image, mask=seg)
 
         image = tf.concat([image1, image2], -1)
         seg = tf.concat([add_background(seg1), add_background(seg2)], -1)
         return (image, seg)
     else:
-        image, seg = tf_fn(image, label, is_training)
+        image, seg = preprocess_fn_finetune(
+            image=image, mask=seg)
         seg = add_background(seg)
-        return (image, seg)
+        return (image, seg)    
 
-def tf_fn(image, label, training_mode, is_training):
-    aug_img, aug_seg = tf.numpy_function(func=aug_fn_2d, inp=[image, label, training_mode, is_training], Tout=tf.float32)
-    return aug_img, aug_seg
 
 def read_tfrecord(tfrecords_dir,
                   batch_size,
@@ -197,10 +192,10 @@ def read_tfrecord(tfrecords_dir,
     if is_training:
         dataset = dataset.shuffle(buffer_size=buffer_size)
 
-    dataset = dataset.map(map_func=parse_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    
-    dataset = dataset.map(partial(aug_fn_2d, training_mode=training_mode, is_training=is_training),
-                          num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.map(
+        partial(parse_fn, training_mode=training_mode, is_training=is_training),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
     dataset = dataset.batch(batch_size, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
 
     # optimise dataset performance
@@ -216,7 +211,7 @@ def read_tfrecord(tfrecords_dir,
 def load_dataset(batch_size,
                  dataset_dir,
                  training_mode,
-                 buffer_size=5000):
+                 buffer_size=1000):
 
     """Function for loading and parsing dataset
     """
@@ -247,6 +242,6 @@ if __name__ == '__main__':
                                     dataset_dir='gs://oai-challenge-dataset/tfrecords/',
                                     training_mode='pretrain')
 
-    for image, label in val_ds:
+    for image, label in train_ds:
         print(image.shape)
         print(label.shape)

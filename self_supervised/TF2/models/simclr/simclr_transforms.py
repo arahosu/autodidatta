@@ -144,6 +144,7 @@ def color_drop(image, keep_channels=True):
         image = tf.tile(image, [1, 1, 3])
     return image
 
+
 def distorted_bounding_box_crop(image,
                                 bbox,
                                 min_object_covered=0.1,
