@@ -10,7 +10,7 @@ flags.DEFINE_bool('normalize', False, 'set whether to normalize the images')
 flags.DEFINE_string('train_mode', 'pretrain', 'set whether to pretrain(default) or finetune')
 flags.DEFINE_integer('train_epochs', 1000, 'Number of epochs to train the model')
 flags.DEFINE_enum('optimizer', 'adamw', ['lamb', 'adam', 'sgd', 'adamw'], 'optimizer for pre-training')
-flags.DEFINE_integer('batch_size', 512, 'set batch size for pre-training.')
+flags.DEFINE_integer('batch_size', 256, 'set batch size for pre-training.')
 flags.DEFINE_float('learning_rate', 1e-03, 'set learning rate for optimizer.')
 flags.DEFINE_float('weight_decay', 1e-04, 'set weight decay')
 flags.DEFINE_integer('proj_head_dim', 512, 'set number of units in the intermediate layers of the projection head')
@@ -21,7 +21,7 @@ flags.DEFINE_bool('eval_linear', True, 'Set whether to run linear (Default) or n
 flags.DEFINE_integer('eval_epochs', 200, 'Number of epochs to finetune the model')
 
 # Model specification
-flags.DEFINE_enum('backbone', 'resnet18', ['resnet50', 'resnet34', 'resnet18'], 'resnet50 (default)')
+flags.DEFINE_enum('backbone', 'vgg_unet', ['resnet50', 'resnet34', 'resnet18', 'vgg_unet'], 'resnet50 (default)')
 flags.DEFINE_bool('use_2D', True, 'set whether to train on 2D or 3D data. Required for BraTS and OAI only')
 flags.DEFINE_string('logdir', 'gs://oai-challenge-dataset/weights/', 'Directory for where the weights are being saved')
 flags.DEFINE_string('weights', None, 'Directory for the trained model weights. Only used for finetuning')

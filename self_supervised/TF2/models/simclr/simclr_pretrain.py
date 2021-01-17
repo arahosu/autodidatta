@@ -49,7 +49,7 @@ class SimCLR(tf.keras.Model):
 
         self.backbone = backbone
         self.projection = projection
-        self.classsifier = classifier
+        self.classifier = classifier
         self.loss_temperature = loss_temperature
 
     def build(self, input_shape):
@@ -84,7 +84,7 @@ class SimCLR(tf.keras.Model):
 
     def shared_step(self, data, training):
 
-        x, y = data
+        x, _ = data
         num_channels = int(x.shape[-1] // 2)
 
         xi = x[..., :num_channels]
@@ -137,7 +137,7 @@ class SimCLR(tf.keras.Model):
     def test_step(self, data):
 
         sim_loss = self.shared_step(data, training=False)
-        if self.online_ft:
+        if self.classifier is not None:
             x, y = data
             num_channels = int(x.shape[-1] // 2)
             view = x[..., :num_channels]
@@ -201,20 +201,20 @@ def main(argv):
             if FLAGS.eval_linear:
                 classifier = tf.keras.Sequential([tfkl.Flatten(),
                                                   tfkl.Dense(10, activation='softmax')],
-                                                 name='classifier')
+                                                  name='classifier')
             else:
                 classifier = tf.keras.Sequential([tfkl.Flatten(),
                                                   tfkl.Dense(512, use_bias=False),
                                                   tfkl.BatchNormalization(),
                                                   tfkl.ReLU(),
                                                   tfkl.Dense(10, activation='softmax')],
-                                                 name='classifier')
+                                                  name='classifier')
         elif FLAGS.dataset in ['oai', 'brats']:
             classifier = None
 
         model = SimCLR(backbone=backbone,
                        projection=projection_head(),
-                       classifier=classifier, 
+                       classifier=None, 
                        loss_temperature=0.5)
 
         if FLAGS.optimizer == 'lamb':
@@ -228,11 +228,15 @@ def main(argv):
         elif FLAGS.optimizer == 'adamw':
             optimizer = AdamW(weight_decay=1e-06, learning_rate=FLAGS.learning_rate)
 
-        model.compile(optimizer=optimizer,
-                      loss_fn=nt_xent_loss,
-                      ft_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-03),
-                      loss=tf.keras.losses.sparse_categorical_crossentropy,
-                      metrics=['acc'])
+        if classifier is not None:
+            model.compile(optimizer=optimizer,
+                          loss_fn=nt_xent_loss,
+                          ft_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-03),
+                          loss=tf.keras.losses.sparse_categorical_crossentropy,
+                          metrics=['acc'])
+        else: 
+            model.compile(optimizer=optimizer,
+                          loss_fn=nt_xent_loss)
 
         model.build((None, *ds_shape))
         model.backbone.summary()
@@ -249,7 +253,7 @@ def main(argv):
               validation_steps=validation_steps,
               verbose=1)
 
-    model.save_weights(os.path.join(logdir, 'simclr_weights.hdf5'))
+    # model.save_weights(os.path.join(logdir, 'simclr_weights.hdf5'))
 
 if __name__ == '__main__':
     app.run(main)
