@@ -1,6 +1,7 @@
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 
+
 def basic_block(x, filters, kernel_size=3, stride=1, conv_shortcut=True, name=None):
     """Basic conv block for ResNet18 & ResNet34.
     Arguments:
@@ -43,6 +44,7 @@ def basic_block(x, filters, kernel_size=3, stride=1, conv_shortcut=True, name=No
 
     return x
 
+
 def bottleneck(x, filters, kernel_size=3, stride=1, conv_shortcut=True, name=None):
     """Bottleneck layer according to original implementation.
     Arguments:
@@ -81,7 +83,8 @@ def bottleneck(x, filters, kernel_size=3, stride=1, conv_shortcut=True, name=Non
 
     x = tfkl.Add(name=name + '_add')([shortcut, x])
     x = tfkl.Activation('relu', name=name + '_out')(x)
-    return x 
+    return x
+
 
 def basic_stack(x, filters, blocks, stride1=2, name=None):
     """A set of stacked basic conv blocks.
@@ -100,6 +103,7 @@ def basic_stack(x, filters, blocks, stride1=2, name=None):
         x = basic_block(x, filters, conv_shortcut=False, name=name + '_block' + str(i))
     return x
 
+
 def bottleneck_stack(x, filters, blocks, stride1=2, name=None):
     """A set of stacked bottleneck blocks.
     Arguments:
@@ -115,6 +119,7 @@ def bottleneck_stack(x, filters, blocks, stride1=2, name=None):
     for i in range(2, blocks + 1):
         x = bottleneck(x, filters, conv_shortcut=False, name=name + '_block' + str(i))
     return x
+
 
 def ResNet(input_shape,
            stack_fn,
@@ -155,6 +160,7 @@ def ResNet(input_shape,
 
     return model
 
+
 def ResNet18(input_shape,
              name='resnet18'):
 
@@ -166,6 +172,7 @@ def ResNet18(input_shape,
 
     return ResNet(input_shape, stack_fn, name)
 
+
 def ResNet34(input_shape,
              name='resnet34'):
 
@@ -176,6 +183,7 @@ def ResNet34(input_shape,
         return basic_stack(x, 512, 3, name='conv5')
 
     return ResNet(input_shape, stack_fn, name)
+
 
 def ResNet50(input_shape,
              name='resnet50'):
