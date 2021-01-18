@@ -9,14 +9,20 @@ import math
 from datetime import datetime
 import os
 
-from self_supervised.TF2.models.networks.resnet import ResNet18, ResNet34, ResNet50
+from self_supervised.TF2.models.networks.resnet import ResNet18, ResNet34, \
+    ResNet50
+from self_supervised.TF2.models.networks.vgg import VGG_UNet_Encoder, \
+    VGG_UNet_Decoder
+
 from self_supervised.TF2.utils.accelerator import setup_accelerator
 from self_supervised.TF2.dataset.cifar10 import load_input_fn
+from self_supervised.TF2.dataset.oai import load_dataset
 from self_supervised.TF2.models.simclr.simclr_flags import FLAGS
+
 
 class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
 
-    def __init__(self, maxsteps, init_tau=0.996):
+    def __init__(self, maxsteps, init_tau=0.99):
         super(BYOLMAWeightUpdate, self).__init__()
 
         self.maxsteps = maxsteps
@@ -27,7 +33,7 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
         def on_train_batch_end(self, batch, logs=None):
             self.global_step += 1
             self.update_weights()
-            # self.current_tau = self.update_tau()
+            self.current_tau = self.update_tau()
 
     def update_tau(self):
         return 1 - (1 - self.init_tau) * (math.cos(math.pi * self.global_step / self.maxsteps) + 1) / 2
@@ -36,15 +42,17 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
         for online_layer, target_layer in zip(self.model.online_network.layers, self.model.target_network.layers):
             if hasattr(online_layer, 'layers'):
                 for online_sub_layer, target_sub_layer in zip(online_layer.layers, target_layer.layers):
-                    if hasattr(online_layer, 'kernel'):
-                        target_sub_layer.kernel = self.current_tau * target_sub_layer.kernel + (1 - self.current_tau) * online_sub_layer.kernel
-                    if hasattr(online_layer, 'bias') and online_layer.bias is not None:
-                        target_sub_layer.bias = self.current_tau * target_sub_layer.bias + (1 - self.current_tau) * online_sub_layer.bias
+                    # if hasattr(online_layer, 'kernel'):
+                    #     target_sub_layer.kernel = self.current_tau * target_sub_layer.kernel + (1 - self.current_tau) * online_sub_layer.kernel
+                    # if hasattr(online_layer, 'bias') and online_layer.bias is not None:
+                    #     target_sub_layer.bias = self.current_tau * target_sub_layer.bias + (1 - self.current_tau) * online_sub_layer.bias
+                    target_sub_layer.set_weights(self.current_tau * target_sub_layer.get_weights() + (1 - self.current_tau) * online_sub_layer.get_weights())
             else:
-                if hasattr(online_layer, 'kernel'):
-                    target_layer.kernel = self.current_tau * target_layer.kernel + (1 - self.current_tau) * online_layer.kernel
-                if hasattr(online_layer, 'bias') and online_layer.bias is not None:
-                    target_layer.bias = self.current_tau * target_layer.bias + (1 - self.current_tau) * online_layer.bias
+                # if hasattr(online_layer, 'kernel'):
+                #     target_layer.kernel = self.current_tau * target_layer.kernel + (1 - self.current_tau) * online_layer.kernel
+                # if hasattr(online_layer, 'bias') and online_layer.bias is not None:
+                #     target_layer.bias = self.current_tau * target_layer.bias + (1 - self.current_tau) * online_layer.bias
+                target_layer.set_weights(self.current_tau * target_layer.get_weights() + (1 - self.current_tau) * online_layer.get_weights())
 
 def MLP(name, hidden_size=512, projection_size=128):
     """ MLP head for projector and predictor """
@@ -57,6 +65,7 @@ def MLP(name, hidden_size=512, projection_size=128):
     model.add(tfkl.Dense(projection_size, use_bias=True))
 
     return model
+
 
 class Online_Network(tf.keras.Model):
 
@@ -79,6 +88,7 @@ class Online_Network(tf.keras.Model):
         z = self.prediction(y, training=training)
         return x, y, z
 
+
 class Target_Network(tf.keras.Model):
     def __init__(self,
                  in_shape,
@@ -94,6 +104,7 @@ class Target_Network(tf.keras.Model):
         x = self.backbone(x, training=training)
         y = self.projection(x, training=training)
         return x, y
+
 
 class BYOL(tf.keras.Model):
 
@@ -129,7 +140,8 @@ class BYOL(tf.keras.Model):
     def build(self, input_shape):
         self.online_network.build(input_shape)
         if self.online_ft:
-            self.classifier.build(self.online_network.compute_output_shape(input_shape)[0])
+            self.classifier.build(
+                self.online_network.compute_output_shape(input_shape)[0])
         self.target_network.build(input_shape)
 
         self.built = True
@@ -147,28 +159,28 @@ class BYOL(tf.keras.Model):
     def cosine_similarity(self, x, y):
         x = tf.linalg.l2_normalize(x, axis=-1)
         y = tf.linalg.l2_normalize(y, axis=-1)
-        return tf.math.reduce_mean(tf.math.reduce_sum(x * y, axis=-1))
+        return 2 - 2*tf.math.reduce_mean(tf.math.reduce_sum(x * y, axis=-1))
 
-    def compute_loss(self, data):
+    def compute_loss(self, data, training=False):
         x, y = data
 
         view_1 = x[..., :3]
         view_2 = x[..., 3:]
 
-        _, _, online_out_1 = self.online_network(view_1, training=True)
-        _, _, online_out_2 = self.online_network(view_2, training=True)
-        _, target_out_1 = self.target_network(view_1, training=True)
-        _, target_out_2 = self.target_network(view_2, training=True)
+        _, _, online_out_1 = self.online_network(view_1, training=training)
+        _, _, online_out_2 = self.online_network(view_2, training=training)
+        _, target_out_1 = self.target_network(view_1, training=training)
+        _, target_out_2 = self.target_network(view_2, training=training)
 
-        loss = -2 * self.cosine_similarity(online_out_1, target_out_2)
-        loss += -2 * self.cosine_similarity(online_out_2, target_out_1)
+        loss = self.cosine_similarity(online_out_1, target_out_2)
+        loss += self.cosine_similarity(online_out_2, target_out_1)
 
         return loss
 
     def train_step(self, data):
         # apply gradient tape to online network only
         with tf.GradientTape() as tape:
-            loss = self.compute_loss(data)
+            loss = self.compute_loss(data, training=True)
         trainable_variables = self.online_network.trainable_variables
         grads = tape.gradient(loss, trainable_variables)
         self.optimizer.apply_gradients(zip(grads, trainable_variables))
@@ -189,7 +201,8 @@ class BYOL(tf.keras.Model):
         with tf.GradientTape() as tape:
             features = self(view, training=True)
             y_pred = self.classifier(features, training=True)
-            loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
+            loss = self.compiled_loss(
+                y, y_pred, regularization_losses=self.losses)
         trainable_variables = self.classifier.trainable_variables
         grads = tape.gradient(loss, trainable_variables)
         self.ft_optimizer.apply_gradients(zip(grads, trainable_variables))
@@ -198,16 +211,18 @@ class BYOL(tf.keras.Model):
     def test_step(self, data):
         x, y = data
         view = x[..., :3]
-        loss = self.compute_loss(data)
+        loss = self.compute_loss(data, training=False)
         if self.online_ft:
             features = self(view, training=False)
             y_pred = self.classifier(features, training=False)
-            loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
+            loss = self.compiled_loss(
+                y, y_pred, regularization_losses=self.losses)
             self.compiled_metrics.update_state(y, y_pred)
             metric_results = {m.name: m.result() for m in self.metrics}
             return {'similarity_loss': loss, **metric_results}
         else:
             return {'similarity_loss': loss}
+
 
 def main(argv):
     del argv
@@ -234,12 +249,12 @@ def main(argv):
         validation_steps = ds_info.splits['test'].num_examples // FLAGS.batch_size
         ds_shape = (32, 32, 3)
     elif FLAGS.dataset == 'oai_challenge':
-        train_ds, val_ds = load_input_fn(batch_size=FLAGS.batch_size,
-                                         dataset_dir='gs://oai-challenge-dataset/tfrecords',
-                                         training_mode='pretrain')
+        train_ds, val_ds = load_dataset(batch_size=FLAGS.batch_size,
+                                        dataset_dir='gs://oai-challenge-dataset/tfrecords',
+                                        training_mode='pretrain')
         steps_per_epoch = 19200 // FLAGS.batch_size
         validation_steps = 4480 // FLAGS.batch_size
-        ds_shape = (384, 384, 1)
+        ds_shape = (288, 288, 1)
 
     with strategy.scope():
 
@@ -250,15 +265,18 @@ def main(argv):
                      linear=True)
 
         if FLAGS.optimizer == 'lamb':
-            optimizer = LAMB(learning_rate=FLAGS.learning_rate)
+            optimizer = LAMB(
+                learning_rate=FLAGS.learning_rate)
         elif FLAGS.optimizer == 'adam':
-            optimizer = Adam(lr=FLAGS.learning_rate)
+            optimizer = Adam(
+                lr=FLAGS.learning_rate)
         elif FLAGS.optimizer == 'adamw':
-            optimizer = AdamW(weight_decay=1e-06, learning_rate=FLAGS.learning_rate)
+            optimizer = AdamW(
+                weight_decay=1e-06, learning_rate=FLAGS.learning_rate)
 
         # build model and compile it
-        model.compile(ft_optimizer=tf.keras.optimizers.Adam(learning_rate=FLAGS.learning_rate), 
-                      optimizer=optimizer, 
+        model.compile(ft_optimizer=Adam(learning_rate=FLAGS.learning_rate),
+                      optimizer=optimizer,
                       loss=tf.keras.losses.sparse_categorical_crossentropy, 
                       metrics=['acc'])
         model.build((None, *ds_shape))
@@ -268,7 +286,8 @@ def main(argv):
     time = datetime.now().strftime("%Y%m%d-%H%M%S")
     logdir = os.path.join(FLAGS.logdir, time)
 
-    movingavg_cb = BYOLMAWeightUpdate(maxsteps=FLAGS.train_epochs * steps_per_epoch)
+    movingavg_cb = BYOLMAWeightUpdate(
+        maxsteps=FLAGS.train_epochs * steps_per_epoch)
 
     model.fit(train_ds,
               steps_per_epoch=steps_per_epoch,

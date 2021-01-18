@@ -237,7 +237,7 @@ def load_dataset(batch_size,
     return train_ds, valid_ds
 
 if __name__ == '__main__':
-    
+
     train_ds, val_ds = load_dataset(batch_size=256,
                                     dataset_dir='gs://oai-challenge-dataset/tfrecords/',
                                     training_mode='pretrain')
