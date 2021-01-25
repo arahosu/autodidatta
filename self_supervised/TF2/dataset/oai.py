@@ -6,12 +6,14 @@ import numpy as np
 from functools import partial
 
 from self_supervised.TF2.aug.oai_transform import get_preprocess_fn
+AUTOTUNE = tf.data.AUTOTUNE
 
 
 def _bytes_feature(value):
     """Returns a bytes_list from a string / byte."""
     if isinstance(value, type(tf.constant(0))):
-        value = value.numpy()  # BytesList won't unpack a string from an EagerTensor.
+        # BytesList won't unpack a string from an Eager Tensor
+        value = value.numpy()
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
@@ -87,7 +89,8 @@ def create_OAI_challenge_dataset(data_folder,
                         'image_raw': _bytes_feature(img_raw),
                         'label_raw': _bytes_feature(seg_raw)
                     }
-                    example = tf.train.Example(features=tf.train.Features(feature=feature))
+                    example = tf.train.Example(
+                        features=tf.train.Features(feature=feature))
                     writer.write(example.SerializeToString())
             else:
                 height = img.shape[0]
@@ -109,14 +112,19 @@ def create_OAI_challenge_dataset(data_folder,
                     'image_raw': _bytes_feature(img_raw),
                     'label_raw': _bytes_feature(seg_raw)
                 }
-                example = tf.train.Example(features=tf.train.Features(feature=feature))
+                example = tf.train.Example(
+                    features=tf.train.Features(feature=feature))
                 writer.write(example.SerializeToString())
         print(f'{idx+1} out of {len(files)} datasets have been processed. Target: {target_shape}, Label: {label_shape}')
 
+
 def add_background(image):
 
-    image_not_background = tf.clip_by_value(tf.math.reduce_sum(image, axis=-1), 0, 1)
-    image_background = tf.expand_dims(tf.math.logical_not(tf.cast(image_not_background, dtype=tf.bool)), axis=-1)
+    image_not_background = tf.clip_by_value(
+        tf.math.reduce_sum(image, axis=-1), 0, 1)
+    image_background = tf.expand_dims(
+        tf.math.logical_not(
+            tf.cast(image_not_background, dtype=tf.bool)), axis=-1)
     image_background = tf.cast(image_background, dtype=tf.float32)
     return tf.concat([image_background, image], axis=-1)
 
@@ -144,7 +152,7 @@ def parse_fn_2d(example_proto,
 
     tf.debugging.check_numerics(image, "Invalid value in your input!")
     tf.debugging.check_numerics(seg, "Invalid value in your label!")
-    
+
     preprocess_fn_pretrain = get_preprocess_fn(
         is_training=is_training, is_pretrain=True)
     preprocess_fn_finetune = get_preprocess_fn(
@@ -157,13 +165,14 @@ def parse_fn_2d(example_proto,
             image=image, mask=seg)
 
         image = tf.concat([image1, image2], -1)
-        seg = tf.concat([add_background(seg1), add_background(seg2)], -1)
+        # seg = tf.concat([add_background(seg1), add_background(seg2)], -1)
+        seg = tf.concat([seg1, seg2], -1)
         return (image, seg)
     else:
         image, seg = preprocess_fn_finetune(
             image=image, mask=seg)
-        seg = add_background(seg)
-        return (image, seg)    
+        # seg = add_background(seg)
+        return (image, seg)
 
 
 def read_tfrecord(tfrecords_dir,
@@ -187,16 +196,17 @@ def read_tfrecord(tfrecords_dir,
     shards = shards.repeat()
     dataset = shards.interleave(tf.data.TFRecordDataset,
                                 cycle_length=cycle_length,
-                                num_parallel_calls=tf.data.experimental.AUTOTUNE)
+                                num_parallel_calls=AUTOTUNE)
 
     if is_training:
         dataset = dataset.shuffle(buffer_size=buffer_size)
 
     dataset = dataset.map(
-        partial(parse_fn, training_mode=training_mode, is_training=is_training),
-        num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        partial(
+            parse_fn, training_mode=training_mode, is_training=is_training),
+        num_parallel_calls=AUTOTUNE)
 
-    dataset = dataset.batch(batch_size, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
+    dataset = dataset.batch(batch_size, drop_remainder=True).prefetch(AUTOTUNE)
 
     # optimise dataset performance
     options = tf.data.Options()
@@ -207,6 +217,7 @@ def read_tfrecord(tfrecords_dir,
     dataset = dataset.with_options(options)
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
+
 
 def load_dataset(batch_size,
                  dataset_dir,
@@ -220,27 +231,31 @@ def load_dataset(batch_size,
     train_dir, valid_dir = 'train/', 'valid/'
 
     # Define the datasets as tf.data.Datasets using read_tfrecord function
-    train_ds = read_tfrecord(tfrecords_dir=os.path.join(dataset_dir, train_dir),
-                             batch_size=batch_size,
-                             buffer_size=buffer_size,
-                             is_training=True,
-                             training_mode=training_mode
-                             )
+    train_ds = read_tfrecord(
+        tfrecords_dir=os.path.join(dataset_dir, train_dir),
+        batch_size=batch_size,
+        buffer_size=buffer_size,
+        is_training=True,
+        training_mode=training_mode
+        )
 
-    valid_ds = read_tfrecord(tfrecords_dir=os.path.join(dataset_dir, valid_dir),
-                             batch_size=batch_size,
-                             buffer_size=buffer_size,
-                             is_training=False,
-                             training_mode=training_mode
-                             )
+    valid_ds = read_tfrecord(
+        tfrecords_dir=os.path.join(dataset_dir, valid_dir),
+        batch_size=batch_size,
+        buffer_size=buffer_size,
+        is_training=False,
+        training_mode=training_mode
+        )
 
     return train_ds, valid_ds
 
+
 if __name__ == '__main__':
 
-    train_ds, val_ds = load_dataset(batch_size=256,
-                                    dataset_dir='gs://oai-challenge-dataset/tfrecords/',
-                                    training_mode='pretrain')
+    train_ds, val_ds = load_dataset(
+        batch_size=256,
+        dataset_dir='gs://oai-challenge-dataset/tfrecords/',
+        training_mode='pretrain')
 
     for image, label in train_ds:
         print(image.shape)

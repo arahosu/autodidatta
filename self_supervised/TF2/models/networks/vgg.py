@@ -4,11 +4,9 @@ import tensorflow.keras.layers as tfkl
 
 def conv_block(x, filters, num_conv, stride=1, out_name=None):
 
-    bn_axis = -1 if tf.keras.backend.image_data_format() == 'channels_last' else 1
-
     for i in range(num_conv):
         x = tfkl.Conv2D(filters, 3, padding='same', use_bias=False)(x)
-        x = tfkl.BatchNormalization(axis=bn_axis, momentum=0.95, epsilon=0.001)(x)
+        x = tfkl.BatchNormalization(axis=-1, momentum=0.95, epsilon=0.001)(x)
         if i == num_conv - 1:
             out_name = out_name
             x = tfkl.ReLU(name=out_name)(x)
@@ -166,4 +164,3 @@ class VGG_UNet_Decoder(tf.keras.Model):
 
         output = self.conv_1x1(x)
         return output
-        

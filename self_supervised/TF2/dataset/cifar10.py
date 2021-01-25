@@ -1,7 +1,11 @@
 import tensorflow as tf
 import tensorflow_datasets as tfds
+from tensorflow.keras.datasets.cifar10 import load_data
 
-from self_supervised.TF2.models.simclr.simclr_transforms import get_preprocess_fn
+from self_supervised.TF2.models.simclr.simclr_transforms import \
+    get_preprocess_fn
+AUTOTUNE = tf.data.experimental.AUTOTUNE
+
 
 def load_input_fn(split,
                   batch_size,
@@ -17,7 +21,8 @@ def load_input_fn(split,
     batch_size (int): The global batch size to use.
     training_mode (str): 'pretrain' for training, 'finetune' for fine-tuning
     normalize (bool): Whether to apply mean-std normalization on features.
-    drop_remainder (bool): Whether to drop the last batch if it has fewer than batch_size elements
+    drop_remainder (bool): Whether to drop the last batch if it has fewer than
+    batch_size elements
     proportion (float): The proportion of dataset to be used.
     Returns:
     Input function which returns a cifar10 dataset.
@@ -32,8 +37,10 @@ def load_input_fn(split,
     else:
         is_training = False
 
-    preprocess_fn_pretrain = get_preprocess_fn(is_training=is_training, is_pretrain=True)
-    preprocess_fn_finetune = get_preprocess_fn(is_training=is_training, is_pretrain=False)
+    preprocess_fn_pretrain = get_preprocess_fn(
+        is_training=is_training, is_pretrain=True)
+    preprocess_fn_finetune = get_preprocess_fn(
+        is_training=is_training, is_pretrain=False)
 
     def preprocess(image, label):
         image = tf.image.convert_image_dtype(image, tf.float32)
@@ -52,21 +59,25 @@ def load_input_fn(split,
             image = preprocess_fn_finetune(image)
         return image, label
 
-    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
+    (x_train, y_train), (x_test, y_test) = load_data()
     if split == 'train':
         num_examples = int(len(x_train) * proportion)
-        (x_train_split, y_train_split) = (x_train[:num_examples,...], y_train[:num_examples,:])
-        dataset = tf.data.Dataset.from_tensor_slices((x_train_split, y_train_split))
+        (x_train_split, y_train_split) = (x_train[:num_examples, ...],
+                                          y_train[:num_examples, :])
+        dataset = tf.data.Dataset.from_tensor_slices(
+            (x_train_split, y_train_split))
     else:
         num_examples = int(len(x_test) * proportion)
-        (x_test_split, y_test_split) = (x_test[:num_examples,...], y_test[:num_examples,:])
-        dataset = tf.data.Dataset.from_tensor_slices((x_test_split, y_test_split))
+        (x_test_split, y_test_split) = (x_test[:num_examples, ...],
+                                        y_test[:num_examples, :])
+        dataset = tf.data.Dataset.from_tensor_slices(
+            (x_test_split, y_test_split))
 
     if split == 'train':
         dataset = dataset.shuffle(buffer_size=dataset_size).repeat()
 
-    dataset = dataset.map(preprocess, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.map(preprocess, num_parallel_calls=AUTOTUNE)
     dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
-    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    dataset = dataset.prefetch(AUTOTUNE)
 
     return dataset

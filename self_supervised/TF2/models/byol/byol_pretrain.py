@@ -22,10 +22,9 @@ from self_supervised.TF2.models.simclr.simclr_flags import FLAGS
 
 class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
 
-    def __init__(self, maxsteps, init_tau=0.99):
+    def __init__(self, init_tau=0.99):
         super(BYOLMAWeightUpdate, self).__init__()
 
-        self.maxsteps = maxsteps
         self.init_tau = init_tau
         self.current_tau = init_tau
         self.global_step = 0
@@ -36,23 +35,14 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
             self.current_tau = self.update_tau()
 
     def update_tau(self):
-        return 1 - (1 - self.init_tau) * (math.cos(math.pi * self.global_step / self.maxsteps) + 1) / 2
+        return 1 - (1 - self.init_tau) * (math.cos(math.pi * self.global_step) + 1) / 2
 
+    @tf.function
     def update_weights(self):
         for online_layer, target_layer in zip(self.model.online_network.layers, self.model.target_network.layers):
-            if hasattr(online_layer, 'layers'):
-                for online_sub_layer, target_sub_layer in zip(online_layer.layers, target_layer.layers):
-                    # if hasattr(online_layer, 'kernel'):
-                    #     target_sub_layer.kernel = self.current_tau * target_sub_layer.kernel + (1 - self.current_tau) * online_sub_layer.kernel
-                    # if hasattr(online_layer, 'bias') and online_layer.bias is not None:
-                    #     target_sub_layer.bias = self.current_tau * target_sub_layer.bias + (1 - self.current_tau) * online_sub_layer.bias
-                    target_sub_layer.set_weights(self.current_tau * target_sub_layer.get_weights() + (1 - self.current_tau) * online_sub_layer.get_weights())
-            else:
-                # if hasattr(online_layer, 'kernel'):
-                #     target_layer.kernel = self.current_tau * target_layer.kernel + (1 - self.current_tau) * online_layer.kernel
-                # if hasattr(online_layer, 'bias') and online_layer.bias is not None:
-                #     target_layer.bias = self.current_tau * target_layer.bias + (1 - self.current_tau) * online_layer.bias
-                target_layer.set_weights(self.current_tau * target_layer.get_weights() + (1 - self.current_tau) * online_layer.get_weights())
+            target_layer.set_weights(
+                self.current_tau * target_layer.get_weights() + (1 - self.current_tau) * online_layer.get_weights())
+
 
 def MLP(name, hidden_size=512, projection_size=128):
     """ MLP head for projector and predictor """
@@ -67,75 +57,55 @@ def MLP(name, hidden_size=512, projection_size=128):
     return model
 
 
-class Online_Network(tf.keras.Model):
+def online_network(backbone, hidden_size, projection_size):
 
-    def __init__(self,
-                 in_shape,
-                 hidden_size=512,
-                 projection_size=128):
-        super(Online_Network, self).__init__()
-        self.backbone = ResNet18(input_shape=in_shape)
-        self.projection = MLP(name="projection",
-                              hidden_size=hidden_size,
-                              projection_size=projection_size)
-        self.prediction = MLP(name="prediction",
-                              hidden_size=hidden_size,
-                              projection_size=projection_size)
+    x = backbone.output
+    y = MLP('projection', hidden_size, projection_size)(x)
+    z = MLP('prediction', hidden_size, projection_size)(y)
 
-    def call(self, x, training=False):
-        x = self.backbone(x, training=training)
-        y = self.projection(x, training=training)
-        z = self.prediction(y, training=training)
-        return x, y, z
+    return tf.keras.Model(
+        inputs=backbone.input, outputs=[x, y, z], name='online_network')
 
 
-class Target_Network(tf.keras.Model):
-    def __init__(self,
-                 in_shape,
-                 hidden_size=512,
-                 projection_size=128):
-        super(Target_Network, self).__init__()
-        self.backbone = ResNet18(input_shape=in_shape)
-        self.projection = MLP(name="projection",
-                              hidden_size=hidden_size,
-                              projection_size=projection_size)
+def target_network(backbone, hidden_size, projection_size):
 
-    def call(self, x, training=False):
-        x = self.backbone(x, training=training)
-        y = self.projection(x, training=training)
-        return x, y
+    x = backbone.output
+    y = MLP('projection', hidden_size, projection_size)(x)
+
+    return tf.keras.Model(
+        inputs=backbone.input, outputs=[x, y], name='target_network')
 
 
 class BYOL(tf.keras.Model):
 
     def __init__(self,
-                 in_shape,
+                 backbone,
                  hidden_size,
                  projection_size,
                  online_ft=False,
                  linear=False):
         super(BYOL, self).__init__()
 
-        self.online_network = Online_Network(in_shape,
-                                             hidden_size,
-                                             projection_size)
-        self.target_network = Target_Network(in_shape,
-                                             hidden_size,
-                                             projection_size)
+        self.online_network = online_network(
+            backbone, hidden_size, projection_size)
+        backbone_2 = tf.keras.models.clone_model(backbone)
+        self.target_network = target_network(
+            backbone_2, hidden_size, projection_size)
         self.online_ft = online_ft
         if online_ft:
             if linear:
-                self.classifier = tf.keras.Sequential([tfkl.Flatten(),
-                                                       tfkl.Dense(10, activation='softmax')
-                                                       ], name='classifier')
+                self.classifier = tf.keras.Sequential(
+                    [tfkl.Flatten(),
+                     tfkl.Dense(10, activation='softmax')
+                     ], name='classifier')
             else:
-                self.classifier = tf.keras.Sequential([
-                            tfkl.Flatten(),
-                            tfkl.Dense(512, use_bias=False),
-                            tfkl.BatchNormalization(),
-                            tfkl.ReLU(),
-                            tfkl.Dense(10, activation='softmax')
-                        ], name='classifier')
+                self.classifier = tf.keras.Sequential(
+                    [tfkl.Flatten(),
+                     tfkl.Dense(512, use_bias=False),
+                     tfkl.BatchNormalization(),
+                     tfkl.ReLU(),
+                     tfkl.Dense(10, activation='softmax')
+                     ], name='classifier')
 
     def build(self, input_shape):
         self.online_network.build(input_shape)
@@ -147,14 +117,15 @@ class BYOL(tf.keras.Model):
         self.built = True
 
     def call(self, x, training=False):
-        y, _, _ = self.online_network(x, training=training)
-        return y
+        x, _, _ = self.online_network(x, training=training)
+        return x
 
     def compile(self, ft_optimizer=None, **kwargs):
         super(BYOL, self).compile(**kwargs)
         if self.online_ft:
-            assert ft_optimizer is not None, 'ft_optimizer should not be None if self.online_ft is True'
-            self.ft_optimizer = ft_optimizer 
+            assert ft_optimizer is not None, \
+                'ft_optimizer should not be None if self.online_ft is True'
+            self.ft_optimizer = ft_optimizer
 
     def cosine_similarity(self, x, y):
         x = tf.linalg.l2_normalize(x, axis=-1)
@@ -249,18 +220,29 @@ def main(argv):
         validation_steps = ds_info.splits['test'].num_examples // FLAGS.batch_size
         ds_shape = (32, 32, 3)
     elif FLAGS.dataset == 'oai_challenge':
-        train_ds, val_ds = load_dataset(batch_size=FLAGS.batch_size,
-                                        dataset_dir='gs://oai-challenge-dataset/tfrecords',
-                                        training_mode='pretrain')
+        train_ds, val_ds = load_dataset(
+            batch_size=FLAGS.batch_size,
+            dataset_dir='gs://oai-challenge-dataset/tfrecords',
+            training_mode='pretrain')
         steps_per_epoch = 19200 // FLAGS.batch_size
         validation_steps = 4480 // FLAGS.batch_size
         ds_shape = (288, 288, 1)
 
     with strategy.scope():
 
-        model = BYOL(in_shape=ds_shape,
-                     hidden_size=512,
-                     projection_size=128,
+        # load model
+        if FLAGS.backbone == 'resnet50':
+            backbone = ResNet50(input_shape=ds_shape)
+        elif FLAGS.backbone == 'resnet34':
+            backbone = ResNet34(input_shape=ds_shape)
+        elif FLAGS.backbone == 'resnet18':
+            backbone = ResNet18(input_shape=ds_shape)
+        elif FLAGS.backbone == 'vgg_unet':
+            backbone = VGG_UNet_Encoder(input_shape=ds_shape)
+
+        model = BYOL(backbone=backbone,
+                     hidden_size=1024,
+                     projection_size=64,
                      online_ft=True,
                      linear=True)
 
@@ -275,19 +257,18 @@ def main(argv):
                 weight_decay=1e-06, learning_rate=FLAGS.learning_rate)
 
         # build model and compile it
-        model.compile(ft_optimizer=Adam(learning_rate=FLAGS.learning_rate),
+        model.compile(ft_optimizer=Adam(learning_rate=3e-03),
                       optimizer=optimizer,
                       loss=tf.keras.losses.sparse_categorical_crossentropy, 
                       metrics=['acc'])
         model.build((None, *ds_shape))
-        model.online_network.backbone.summary()
+        model.online_network.summary()
 
     # Define checkpoint
     time = datetime.now().strftime("%Y%m%d-%H%M%S")
     logdir = os.path.join(FLAGS.logdir, time)
 
-    movingavg_cb = BYOLMAWeightUpdate(
-        maxsteps=FLAGS.train_epochs * steps_per_epoch)
+    movingavg_cb = BYOLMAWeightUpdate()
 
     model.fit(train_ds,
               steps_per_epoch=steps_per_epoch,
@@ -297,6 +278,7 @@ def main(argv):
               callbacks=[movingavg_cb])
 
     model.save_weights(os.path.join(logdir, 'byol_weights.hdf5'))
+
 
 if __name__ == '__main__':
     app.run(main)

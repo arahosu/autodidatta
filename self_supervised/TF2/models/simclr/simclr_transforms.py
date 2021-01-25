@@ -2,27 +2,32 @@ import tensorflow as tf
 from functools import partial
 from self_supervised.TF2.models.simclr.simclr_flags import FLAGS
 
+
 def random_apply(func, p, x):
 
     image = tf.cond(tf.less(
-                    tf.random.uniform([], minval=0, maxval=1, dtype=tf.float32),
+                    tf.random.uniform(
+                        [], minval=0, maxval=1, dtype=tf.float32),
                     tf.cast(p, tf.float32)),
                     lambda: func(x),
                     lambda: x)
 
     return image
 
+
 def random_brightness(image,
                       max_delta,
                       impl='v1'):
 
     if impl == 'v2':
-        factor = tf.random.uniform([], tf.math.maximum(1.0 - max_delta, 0), 1.0 + max_delta)
+        factor = tf.random.uniform(
+            [], tf.math.maximum(1.0 - max_delta, 0), 1.0 + max_delta)
         image = image * factor
     elif impl == 'v1':
         image = tf.image.random_brightness(image, max_delta=max_delta)
 
     return image
+
 
 def color_jitter(image, strength=1.0, random_order=True, impl='v1'):
 
@@ -37,6 +42,7 @@ def color_jitter(image, strength=1.0, random_order=True, impl='v1'):
     else:
         return color_jitter_nonrand(
             image, brightness, contrast, saturation, hue, impl=impl)
+
 
 def color_jitter_nonrand(image,
                          brightness=0,
@@ -72,9 +78,11 @@ def color_jitter_nonrand(image,
         return x
 
     for i in range(4):
-        image = apply_transform(i, image, brightness, contrast, saturation, hue)
+        image = apply_transform(
+            i, image, brightness, contrast, saturation, hue)
         image = tf.clip_by_value(image, 0., 1.)
     return image
+
 
 def color_jitter_rand(image,
                       brightness=0,
@@ -137,6 +145,7 @@ def color_jitter_rand(image,
         image = tf.clip_by_value(image, 0., 1.)
     return image
 
+
 def color_drop(image, keep_channels=True):
 
     image = tf.image.rgb_to_grayscale(image)
@@ -152,21 +161,24 @@ def distorted_bounding_box_crop(image,
                                 area_range=(0.05, 1.0),
                                 max_attempts=100):
 
-    sample_distorted_bounding_box = tf.image.sample_distorted_bounding_box(image_size=image.shape,
-                                                                           bounding_boxes=bbox,
-                                                                           min_object_covered=min_object_covered,
-                                                                           aspect_ratio_range=aspect_ratio_range,
-                                                                           area_range=area_range,
-                                                                           max_attempts=max_attempts,
-                                                                           use_image_if_no_bounding_boxes=True)
+    sample_distorted_bounding_box = tf.image.sample_distorted_bounding_box(
+        image_size=image.shape,
+        bounding_boxes=bbox,
+        min_object_covered=min_object_covered,
+        aspect_ratio_range=aspect_ratio_range,
+        area_range=area_range,
+        max_attempts=max_attempts,
+        use_image_if_no_bounding_boxes=True)
 
     bbox_start, bbox_size, _ = sample_distorted_bounding_box
 
     offset_y, offset_x, _ = tf.unstack(bbox_start)
     target_height, target_width, _ = tf.unstack(bbox_size)
-    image = tf.image.crop_to_bounding_box(image, offset_y, offset_x, target_height, target_width)
+    image = tf.image.crop_to_bounding_box(
+        image, offset_y, offset_x, target_height, target_width)
 
     return image
+
 
 def center_crop(image, image_size, crop_proportion):
 
@@ -174,6 +186,7 @@ def center_crop(image, image_size, crop_proportion):
     image = tf.image.resize(image, image_size, tf.image.ResizeMethod.BICUBIC)
 
     return image
+
 
 def crop_and_resize(image, image_size):
 
@@ -190,13 +203,15 @@ def crop_and_resize(image, image_size):
 
     return image
 
+
 def gaussian_blur(image, kernel_size, sigma, padding='SAME'):
 
     radius = tf.cast(kernel_size / 2, tf.int32)
     kernel_size = radius * 2 + 1
     x = tf.cast(tf.range(-radius, radius + 1), tf.float32)
     blur_filter = tf.math.exp(
-        -tf.math.pow(x, 2.0) / (2.0 * tf.math.pow(tf.cast(sigma, tf.float32), 2.0))
+        -tf.math.pow(x, 2.0) / (2.0 * tf.math.pow(
+            tf.cast(sigma, tf.float32), 2.0))
     )
     blur_filter /= tf.math.reduce_sum(blur_filter)
 
@@ -212,13 +227,16 @@ def gaussian_blur(image, kernel_size, sigma, padding='SAME'):
     if expand_batch_dim:
         image = tf.expand_dims(image, axis=0)
 
-    blurred = tf.nn.depthwise_conv2d(image, blur_h, strides=[1, 1, 1, 1], padding=padding)
-    blurred = tf.nn.depthwise_conv2d(blurred, blur_v, strides=[1, 1, 1, 1], padding=padding)
+    blurred = tf.nn.depthwise_conv2d(
+        image, blur_h, strides=[1, 1, 1, 1], padding=padding)
+    blurred = tf.nn.depthwise_conv2d(
+        blurred, blur_v, strides=[1, 1, 1, 1], padding=padding)
 
     if expand_batch_dim:
         blurred = tf.squeeze(blurred, axis=0)
 
     return blurred
+
 
 def random_crop_with_resize(image, image_size, p=1.0):
 
@@ -227,6 +245,7 @@ def random_crop_with_resize(image, image_size, p=1.0):
         return image
     return random_apply(_transform, p=p, x=image)
 
+
 def random_color_jitter(image, strength, p=1.0):
 
     def _transform(image):
@@ -234,6 +253,7 @@ def random_color_jitter(image, strength, p=1.0):
         image = random_apply(color_jitter_t, p=0.8, x=image)
         return random_apply(color_drop, p=0.2, x=image)
     return random_apply(_transform, p=p, x=image)
+
 
 def random_blur(image, image_size, p=1.0):
 
@@ -247,6 +267,7 @@ def random_blur(image, image_size, p=1.0):
         )
 
     return random_apply(_transform, p=p, x=image)
+
 
 def preprocess_for_train(image,
                          image_size,
@@ -270,6 +291,7 @@ def preprocess_for_train(image,
 
     return image
 
+
 def preprocess_for_eval(image, image_size, crop=True):
 
     if crop:
@@ -282,13 +304,19 @@ def preprocess_for_eval(image, image_size, crop=True):
 
     return image
 
-def preprocess_image(image, image_size, is_training=False, color_distort=True, test_crop=True):
+
+def preprocess_image(image,
+                     image_size,
+                     is_training=False,
+                     color_distort=True,
+                     test_crop=True):
 
     image = tf.image.convert_image_dtype(image, dtype=tf.float32)
     if is_training:
         return preprocess_for_train(image, image_size, color_distort)
     else:
         return preprocess_for_eval(image, image_size, test_crop)
+
 
 def get_preprocess_fn(is_training, is_pretrain):
 
