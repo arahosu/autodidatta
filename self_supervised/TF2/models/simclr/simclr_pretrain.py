@@ -5,7 +5,7 @@ from tensorflow_addons.optimizers import LAMB, AdamW
 from tensorflow.keras.optimizers import Adam, SGD
 
 from absl import app
-from datetime import datetime
+# from datetime import datetime
 # import os
 
 from self_supervised.TF2.models.networks.resnet import ResNet18, \
@@ -78,7 +78,8 @@ class SimCLR(tf.keras.Model):
         self.loss_fn = loss_fn
         if self.classifier is not None:
             assert ft_optimizer is not None, \
-                'ft_optimizer should not be None if self.classifier is not None'
+                'ft_optimizer should not be None if self.classifier is not \
+                    None'
             self.ft_optimizer = ft_optimizer
 
     def compute_output_shape(self, input_shape):
@@ -113,7 +114,8 @@ class SimCLR(tf.keras.Model):
     def train_step(self, data):
         with tf.GradientTape() as tape:
             loss = self.shared_step(data, training=True)
-        trainable_variables = self.backbone.trainable_variables + self.projection.trainable_variables
+        trainable_variables = self.backbone.trainable_variables + \
+            self.projection.trainable_variables
         grads = tape.gradient(loss, trainable_variables)
         self.optimizer.apply_gradients(zip(grads, trainable_variables))
 
@@ -216,7 +218,8 @@ class SimCLR_UNet(tf.keras.Model):
     def train_step(self, data):
         with tf.GradientTape() as tape:
             loss = self.shared_step(data, training=True)
-        trainable_variables = self.backbone.trainable_variables + self.projection.trainable_variables
+        trainable_variables = self.backbone.trainable_variables + \
+            self.projection.trainable_variables
         grads = tape.gradient(loss, trainable_variables)
         self.optimizer.apply_gradients(zip(grads, trainable_variables))
 
@@ -248,7 +251,7 @@ class SimCLR_UNet(tf.keras.Model):
         x, y = data
         num_channels = int(x.shape[-1] // 2)
         num_classes = int(y.shape[-1] // 2)
-        
+
         view = x[..., :num_channels]
         y_true = y[..., :num_classes]
 
@@ -281,8 +284,10 @@ def main(argv):
                                normalize=FLAGS.normalize)
 
         ds_info = tfds.builder(FLAGS.dataset).info
-        steps_per_epoch = ds_info.splits['train'].num_examples // FLAGS.batch_size
-        validation_steps = ds_info.splits['test'].num_examples // FLAGS.batch_size
+        num_train_examples = ds_info.splits['train'].num_examples
+        num_val_examples = ds_info.splits['test'].num_examples
+        steps_per_epoch = num_train_examples // FLAGS.batch_size
+        validation_steps = num_val_examples // FLAGS.batch_size
         ds_shape = (32, 32, 3)
 
     elif FLAGS.dataset == 'oai':
@@ -331,7 +336,9 @@ def main(argv):
             metrics = ['acc']
 
         elif FLAGS.dataset in ['oai', 'brats']:
-            classifier = VGG_UNet_Decoder(7)
+            classifier = VGG_UNet_Decoder(
+                6, output_activation='sigmoid',
+                use_transpose=False)
 
             model = SimCLR_UNet(backbone=backbone,
                                 projection=projection_head(),
@@ -339,8 +346,9 @@ def main(argv):
                                 loss_temperature=0.5)
 
             loss = tversky_loss
-            dice_metrics = [DiceMetrics(idx=idx) for idx in range(7)]
-            metrics = [dice_metrics, dice_coef_eval]
+            dice_metrics = [DiceMetrics(idx=idx) for idx in range(6)]
+            # metrics = [dice_metrics, dice_coef_eval]
+            metrics = [dice_metrics]
 
         if FLAGS.optimizer == 'lamb':
             optimizer = LAMB(
@@ -371,8 +379,8 @@ def main(argv):
         model.backbone.summary()
 
     # Define checkpoints
-    time = datetime.now().strftime("%Y%m%d-%H%M%S")
-    # logdir = os.path.join(FLAGS.logdir, time)        
+    # time = datetime.now().strftime("%Y%m%d-%H%M%S")
+    # logdir = os.path.join(FLAGS.logdir, time)
 
     model.fit(train_ds,
               steps_per_epoch=steps_per_epoch,

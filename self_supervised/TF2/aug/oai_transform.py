@@ -5,12 +5,12 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 from functools import partial
 
-from self_supervised.TF2.models.simclr.simclr_transforms import random_apply
-from self_supervised.TF2.models.simclr.simclr_transforms import distorted_bounding_box_crop
-from self_supervised.TF2.models.simclr.simclr_transforms import random_brightness
-from self_supervised.TF2.models.simclr.simclr_transforms import center_crop
+from self_supervised.TF2.models.simclr.simclr_transforms import random_apply, \
+    distorted_bounding_box_crop, random_brightness, center_crop
 
-# NOTE: Albumentation and Volumentation are not compatible with TPUs due to tf.numpy_function
+# NOTE: Albumentation and Volumentation are not compatible with TPUs due to \
+# tf.numpy_function
+
 """
 def get_augmentations_3d(patch_size):
     return V.Compose([
@@ -28,10 +28,11 @@ def get_augmentations_3d(patch_size):
 def get_augmentations_2d(patch_size, is_training):
     if is_training:
         return A.Compose([
-            A.RandomResizedCrop(height=patch_size[0], width=patch_size[1],scale=(0.65, 1.3)),
+            A.RandomResizedCrop(
+                height=patch_size[0], width=patch_size[1],scale=(0.65, 1.3)),
             A.Rotate(limit=15, p=0.2),
             A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),s
             A.ElasticTransform(),
             A.RandomRotate90(),
             A.RandomGamma()
@@ -63,6 +64,7 @@ def crop_and_resize(image, image_size):
 def random_resized_crop(image, image_size, mask=None, p=1.0):
     if mask is not None:
         image = tf.concat([image, mask], axis=-1)
+
     def _transform(image):
         image = crop_and_resize(image, image_size)
         return image
@@ -79,12 +81,13 @@ def jitter_rand(image,
                 contrast=0,
                 gamma=0,
                 impl='v1'):
-    """Distorts the brightness, contrast and gamma of the image (jittering order is random).
+    """Distorts the brightness, contrast and gamma of the image
+    (jittering order is random).
     Args:
     image: The input image tensor.
     brightness: A float, specifying the brightness for jitter.
     contrast: A float, specifying the contrast for jitter.
-    gamma: A float, specifying the gamma for 
+    gamma: A float, specifying the gamma for
     impl: 'v1' or 'v2'.  Whether to use simclrv1 or simclrv2's
         version of random brightness.
     Returns:
@@ -187,6 +190,8 @@ def preprocess_for_train(image,
 
     if crop:
         image = random_resized_crop(image, image_size)
+    else:
+        image = center_crop(image, image_size, 0.5625)
 
     if flip:
         image = tf.image.random_flip_left_right(image)
@@ -197,7 +202,8 @@ def preprocess_for_train(image,
         new_image = image[..., :num_image_ch]
         mask = image[..., num_image_ch:]
 
-        new_image = tf.reshape(new_image, [image_size[0], image_size[1], num_image_ch])
+        new_image = tf.reshape(
+            new_image, [image_size[0], image_size[1], num_image_ch])
         mask = tf.reshape(mask, [image_size[0], image_size[1], mask_shape[-1]])
 
     return new_image, mask
@@ -207,7 +213,7 @@ def preprocess_for_eval(image,
                         image_size,
                         mask=None,
                         crop=True):
-    
+
     if mask is not None:
         num_image_ch = image.shape[-1]
         mask_shape = mask.shape
@@ -222,8 +228,10 @@ def preprocess_for_eval(image,
         new_image = image[..., :num_image_ch]
         mask = image[..., num_image_ch:]
 
-        new_image = tf.reshape(new_image, [image_size[0], image_size[1], num_image_ch])
-        mask = tf.reshape(mask, [image_size[0], image_size[1], mask_shape[-1]])
+        new_image = tf.reshape(
+            new_image, [image_size[0], image_size[1], num_image_ch])
+        mask = tf.reshape(
+            mask, [image_size[0], image_size[1], mask_shape[-1]])
 
     return new_image, mask
 
@@ -249,4 +257,3 @@ def get_preprocess_fn(is_training, is_pretrain):
                    is_training=is_training,
                    distort=is_pretrain,
                    test_crop=True)
-    
