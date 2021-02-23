@@ -177,8 +177,8 @@ def preprocess_for_train(image,
                          image_size,
                          mask=None,
                          distort=True,
-                         crop=True,
-                         flip=True):
+                         crop=False,
+                         flip=False):
 
     if distort:
         image = apply_random_jitter(image, strength=0.5)
