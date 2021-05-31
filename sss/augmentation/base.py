@@ -1,6 +1,4 @@
 import tensorflow as tf
-from functools import partial
-from sss.flags import FLAGS
 
 
 def random_apply(func, p, x):
@@ -30,8 +28,8 @@ def random_brightness(image,
 
 
 def random_gamma(image, max_gamma):
-    gamma = tf.random.uniform(shape=[], minval=0., maxval=max_gamma)
-    return tf.image.adjust_gamma(image, gamma, gain=1)
+    gamma = tf.random.uniform(shape=[], minval=0.5, maxval=max_gamma)
+    return tf.math.sign(image) * (tf.math.abs(image) + 1e-08)**gamma
 
 
 def random_gaussian_noise(image, noise):
@@ -74,15 +72,10 @@ def center_crop(image, image_size, crop_proportion):
     return image
 
 
-def crop_and_resize(image, image_size):
+def crop_and_resize(image, image_size, area_range=(0.08, 1.0)):
 
     bbox = tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])
     aspect_ratio = image_size[0] / image_size[1]
-
-    if FLAGS.dataset == 'cifar10':
-        area_range = (0.08, 1.0)
-    elif FLAGS.dataset == 'oai':
-        area_range = (0.65, 1.0)
 
     image = distorted_bounding_box_crop(
         image,
@@ -130,10 +123,14 @@ def gaussian_blur(image, kernel_size, sigma, padding='SAME'):
     return blurred
 
 
-def random_crop_with_resize(image, image_size, p=1.0):
+def random_crop_with_resize(image,
+                            image_size,
+                            area_range=(0.08, 1.0),
+                            p=1.0):
 
     def _transform(image):
-        image = crop_and_resize(image, image_size)
+        image = crop_and_resize(
+            image, image_size, area_range=area_range)
         return image
     return random_apply(_transform, p=p, x=image)
 

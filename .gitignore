@@ -1,4 +1,6 @@
 *.json
+*.hdf5
+*.csv
 
 # Python cache
 **/__pycache__
