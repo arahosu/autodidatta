@@ -3,8 +3,7 @@ from functools import partial
 
 from sss.augmentation.base import random_apply, \
     random_brightness, random_gamma, random_gaussian_noise, \
-    random_crop_with_resize, center_crop, random_blur
-from sss.flags import FLAGS
+    random_crop_with_resize, random_blur
 
 
 def mono_jitter_rand(image,
@@ -58,15 +57,15 @@ def mono_jitter_rand(image,
 
 def mono_jitter(image, strength=1.0, impl='v1'):
 
-    brightness = 0.4 * strength
-    contrast = 0.4 * strength
-    gamma = 0.2 * strength
-    noise = 1.0 * strength
+    brightness = 0.1 * strength
+    contrast = 0.1 * strength
+    gamma = 2.0 * strength
+    noise = 0.1 * strength
 
     return mono_jitter_rand(image, brightness, contrast, gamma, noise)
 
 
-def random_mono_jitter(image, strength, p=1.0):
+def random_mono_jitter(image, strength, p=0.8):
 
     def _transform(image):
         mono_jitter_t = partial(mono_jitter, strength=strength)
@@ -78,13 +77,14 @@ def preprocess_for_train(image,
                          image_size,
                          mask=None,
                          distort=True,
-                         crop=True,
-                         flip=True):
+                         crop=False,
+                         flip=False):
 
     if distort:
-        image = random_mono_jitter(image, strength=0.5)
+        image = random_mono_jitter(image, strength=1.0, p=0.5)
+        image = random_blur(image, image_size, p=0.5)
 
-    image = random_blur(image, image_size, p=0.5)
+    image = tf.clip_by_value(image, 0., 1.)
 
     if mask is not None:
         mask_shape = mask.shape
@@ -92,18 +92,14 @@ def preprocess_for_train(image,
         image = tf.concat([image, mask], axis=-1)
 
     if crop:
-        image = random_crop_with_resize(image, image_size)
+        image = random_crop_with_resize(
+            image, image_size, area_range=(0.5625, 1.0))
     else:
-        if FLAGS.dataset == 'oai':
-            crop_factor = 0.5625
-        else:
-            crop_factor = 0.875
-        image = center_crop(image, image_size, crop_factor)
+        image = tf.image.resize_with_crop_or_pad(
+            image, image_size[0], image_size[1])
 
     if flip:
         image = tf.image.random_flip_left_right(image)
-
-    image = tf.clip_by_value(image, 0., 1.)
 
     if mask is not None:
         new_image = image[..., :num_image_ch]
@@ -127,7 +123,8 @@ def preprocess_for_eval(image,
         image = tf.concat([image, mask], axis=-1)
 
     if crop:
-        image = center_crop(image, image_size, 0.5625)
+        image = tf.image.resize_with_crop_or_pad(
+            image, image_size[0], image_size[1])
 
     image = tf.clip_by_value(image, 0., 1.)
 
@@ -152,15 +149,16 @@ def preprocess_image(image,
 
     image = tf.image.convert_image_dtype(image, dtype=tf.float32)
     if is_training:
-        return preprocess_for_train(image, image_size, mask, distort)
+        return preprocess_for_train(
+            image, image_size, mask, distort, crop=distort, flip=distort)
     else:
         return preprocess_for_eval(image, image_size, mask, test_crop)
 
 
-def get_preprocess_fn(is_training, is_pretrain):
+def get_preprocess_fn(is_training, is_pretrain, image_size):
 
     return partial(preprocess_image,
-                   image_size=[FLAGS.image_size, FLAGS.image_size],
+                   image_size=[image_size, image_size],
                    is_training=is_training,
                    distort=is_pretrain,
                    test_crop=True)

@@ -4,7 +4,6 @@ from functools import partial
 from sss.augmentation.base import random_apply, \
     random_brightness, random_crop_with_resize, \
     random_blur, center_crop
-from sss.flags import FLAGS
 
 
 def color_jitter(image, strength=1.0, random_order=True, impl='v1'):
@@ -146,7 +145,8 @@ def preprocess_for_train(image,
                          image_size,
                          color_distort=True,
                          crop=True,
-                         flip=True):
+                         flip=True,
+                         blur=True):
 
     if crop:
         image = random_crop_with_resize(image, image_size)
@@ -157,7 +157,7 @@ def preprocess_for_train(image,
     if color_distort:
         image = random_color_jitter(image, strength=0.5)
 
-    if FLAGS.dataset != 'cifar10':
+    if blur:
         image = random_blur(image, image_size, p=0.5)
 
     height, width = image_size[0], image_size[1]
@@ -185,24 +185,26 @@ def preprocess_image(image,
                      image_size,
                      is_training=False,
                      color_distort=True,
-                     test_crop=True):
+                     test_crop=True,
+                     blur=True):
 
     image = tf.image.convert_image_dtype(image, dtype=tf.float32)
     if is_training:
-        return preprocess_for_train(image, image_size, color_distort)
+        return preprocess_for_train(
+            image, image_size, color_distort, crop=True, flip=True, blur=blur)
     else:
         return preprocess_for_eval(image, image_size, test_crop)
 
 
-def get_preprocess_fn(is_training, is_pretrain):
-
-    if FLAGS.dataset == 'cifar10':
-        test_crop = False
-    else:
-        test_crop = True
+def get_preprocess_fn(is_training,
+                      is_pretrain,
+                      image_size,
+                      test_crop,
+                      blur):
 
     return partial(preprocess_image,
-                   image_size=[FLAGS.image_size, FLAGS.image_size],
+                   image_size=[image_size, image_size],
                    is_training=is_training,
                    color_distort=is_pretrain,
-                   test_crop=test_crop)
+                   test_crop=test_crop,
+                   blur=blur)

@@ -45,6 +45,10 @@ def tversky_loss(y_true,
     tensor
         tensor containing tversky loss.
     """
+
+    # y_true = y_true[..., 1:]
+    # y_pred = y_pred[..., 1:]
+
     y_true = tf.reshape(y_true, [-1])
     y_pred = tf.reshape(y_pred, [-1])
     truepos = tf.math.reduce_sum(y_true * y_pred)
@@ -53,4 +57,4 @@ def tversky_loss(y_true,
         (1 - y_pred) * y_true)
     answer = (truepos + smooth) / ((truepos + smooth) + fp_and_fn)
 
-    return tf.cast(1 - answer, tf.float32)    
+    return tf.cast(1 - answer, tf.float32)

@@ -2,8 +2,8 @@ import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 
 
-def projection_head(hidden_dim=512,
-                    output_dim=128,
+def projection_head(hidden_dim=2048,
+                    output_dim=2048,
                     num_layers=1,
                     batch_norm_output=False
                     ):
@@ -24,8 +24,8 @@ def projection_head(hidden_dim=512,
     return model
 
 
-def predictor_head(hidden_dim=512,
-                   output_dim=128,
+def predictor_head(hidden_dim=2048,
+                   output_dim=2048,
                    num_layers=1
                    ):
 
