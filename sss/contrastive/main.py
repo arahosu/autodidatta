@@ -155,7 +155,7 @@ def main(argv):
                         input_shape=ds_shape,
                         projection=projection_head(),
                         classifier=classifier,
-                        finetune_decoder_only=False,
+                        finetune_decoder_only=FLAGS.finetune_decoder_only,
                         loss_temperature=FLAGS.loss_temperature)
                 else:
                     model = SimCLR(
@@ -182,7 +182,7 @@ def main(argv):
                         ),
                         predictor=predictor_head(),
                         classifier=classifier,
-                        finetune_decoder_only=False)
+                        finetune_decoder_only=FLAGS.finetune_decoder_only)
 
         elif FLAGS.model == 'supervised':
             model = tf.keras.Sequential(

@@ -76,6 +76,11 @@ flags.DEFINE_bool(
     True,
     'whether to pretrain encoder only for UNet'
 )
+flags.DEFINE_bool(
+    'finetune_decoder_only',
+    False,
+    'whether to finetune decoder only during training'
+)
 
 # logging specification
 flags.DEFINE_bool(

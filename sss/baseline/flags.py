@@ -19,7 +19,7 @@ flags.DEFINE_bool(
     'custom_schedule', False,
     'Set whether to enable custom exponential decaying learning rate schedule')
 flags.DEFINE_bool(
-    'multi_class', True,
+    'multi_class', False,
     'Set whether to train in a binary or multi-class/label (Default) settting')
 flags.DEFINE_bool(
     'add_background', True,
