@@ -9,7 +9,7 @@ flags.DEFINE_bool('normalize', True, 'set whether to normalize the images')
 
 # Training
 flags.DEFINE_integer(
-    'train_epochs', 50, 'Number of epochs to train the model')
+    'train_epochs', 80, 'Number of epochs to train the model')
 flags.DEFINE_integer('batch_size', 64, 'set batch size for pre-training.')
 flags.DEFINE_float('learning_rate', 2e-04, 'set learning rate for optimizer.')
 flags.DEFINE_bool(
@@ -36,6 +36,12 @@ flags.DEFINE_float(
     1.0,
     'fraction of training data to be used during downstream evaluation'
 )
+flags.DEFINE_bool(
+    'finetune_decoder_only',
+    True,
+    'whether to finetune decoder only during training'
+)
+
 flags.DEFINE_float(
     'ft_learning_rate', 2e-04, 'set learning rate for finetuning optimizer')
 
@@ -43,6 +49,12 @@ flags.DEFINE_float(
 flags.DEFINE_bool(
     'save_weights', False,
     'Whether to save weights. If True, weights are saved in logdir')
+flags.DEFINE_bool(
+    'save_history', True,
+    'Whether to save the training history.')
+flags.DEFINE_string(
+    'histdir', '/home/User/Self-Supervised-Segmentation/training_logs',
+    'Directory for where the training history is being saved')
 flags.DEFINE_string(
     'logdir', '/home/User/Self-Supervised-Segmentation/weights',
     'Directory for where the weights are being saved')
@@ -53,7 +65,7 @@ flags.DEFINE_bool(
     'use_gpu', 'False', 'set whether to use GPU')
 flags.DEFINE_integer(
     'num_cores', 8, 'set number of cores/workers for TPUs/GPUs')
-flags.DEFINE_string('tpu', 'oai-tpu', 'set the name of TPU device')
+flags.DEFINE_string('tpu', 'oai-tpu-2', 'set the name of TPU device')
 flags.DEFINE_bool('use_bfloat16', True, 'set whether to use mixed precision')
 
 FLAGS = flags.FLAGS

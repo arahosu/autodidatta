@@ -1,4 +1,6 @@
 import tensorflow as tf
+import itertools
+import numpy as np
 
 
 def random_apply(func, p, x):
@@ -147,3 +149,40 @@ def random_blur(image, image_size, p=1.0):
         )
 
     return random_apply(_transform, p=p, x=image)
+
+
+def jigsaw(image, patches_per_side=3, num_labels=64):
+    M = int(image.shape[0] // patches_per_side)
+    N = int(image.shape[1] // patches_per_side)
+    patch_list = []
+    shuffle_image = tf.zeros_like(image)
+
+    for x in range(0, image.shape[0], M):
+        for y in range(0, image.shape[1], N):
+            patch = image[x:x+M, y:y+N, :]
+            patch_list.append(patch)
+
+    indices = [i for i in range(patches_per_side*patches_per_side)]
+    perm = list(itertools.permutations(indices))
+    new_list = [list(perm[i]) for i in range(len(perm))]
+    if num_labels <= len(perm):
+        new_list = new_list[-num_labels:]
+    # rand_label_idx = tf.random.uniform([], 1, len(new_list), tf.int32)
+    rand_label_idx = np.random.randint(0, len(new_list))
+    patch_list = [patch_list[i] for i in new_list[rand_label_idx]]
+
+    idx = 0
+    for x in range(0, image.shape[0], M):
+        for y in range(0, image.shape[1], N):
+            update_elem = patch_list[idx]
+            update_elem = tf.reshape(update_elem, [-1, image.shape[-1]])
+            update_indices = [[a, b] for a in range(x, x+M) for b in range(y, y + N)]
+            a = tf.tensor_scatter_nd_update(
+                shuffle_image, update_indices, update_elem)
+            shuffle_image = a
+            idx += 1
+
+    # rand_label_idx += 1
+    rand_label_idx = tf.cast(rand_label_idx, tf.float32)
+
+    return shuffle_image, rand_label_idx

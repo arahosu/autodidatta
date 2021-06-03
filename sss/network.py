@@ -5,8 +5,7 @@ import tensorflow.keras.layers as tfkl
 def projection_head(hidden_dim=2048,
                     output_dim=2048,
                     num_layers=1,
-                    batch_norm_output=False
-                    ):
+                    batch_norm_output=False):
 
     model = tf.keras.Sequential()
     model.add(tfkl.GlobalAveragePooling2D())
@@ -24,10 +23,34 @@ def projection_head(hidden_dim=2048,
     return model
 
 
+def projection_head_conv(hidden_dim=32,
+                         output_dim=32,
+                         num_layers=1,
+                         batch_norm_output=False,
+                         flatten_output=True):
+
+    model = tf.keras.Sequential()
+
+    for _ in range(num_layers):
+        model.add(
+            tfkl.Conv2D(hidden_dim, (1, 1), padding='same', use_bias=False))
+        model.add(tfkl.BatchNormalization())
+        model.add(tfkl.ReLU())
+
+    model.add(
+        tfkl.Conv2D(hidden_dim, (1, 1), padding='same', use_bias=True))
+    if batch_norm_output:
+        model.add(tfkl.BatchNormalization())
+
+    if flatten_output:
+        model.add(tfkl.Flatten())
+
+    return model
+
+
 def predictor_head(hidden_dim=2048,
                    output_dim=2048,
-                   num_layers=1
-                   ):
+                   num_layers=1):
 
     model = tf.keras.Sequential()
     model.add(tfkl.Flatten())

@@ -12,7 +12,7 @@ from datetime import datetime
 from sss.contrastive.flags import FLAGS
 from sss.datasets.cifar10 import load_input_fn
 from sss.datasets.oai import load_dataset
-from sss.network import projection_head, predictor_head
+from sss.network import projection_head, predictor_head, projection_head_conv
 from sss.resnet import ResNet18, ResNet34, ResNet50
 from sss.vgg import VGG_UNet
 from sss.contrastive.simclr import SimCLR, SimCLR_UNet
@@ -160,7 +160,7 @@ def main(argv):
                 else:
                     model = SimCLR(
                         backbone=backbone,
-                        projection=projection_head(),
+                        projection=projection_head_conv(),
                         classifier=classifier,
                         loss_temperature=FLAGS.loss_temperature)
         elif FLAGS.model == 'simsiam':
@@ -178,11 +178,17 @@ def main(argv):
                     model = SimSiam_UNet(
                         input_shape=ds_shape,
                         projection=projection_head(
-                            batch_norm_output=True
-                        ),
+                            batch_norm_output=True),
                         predictor=predictor_head(),
                         classifier=classifier,
                         finetune_decoder_only=FLAGS.finetune_decoder_only)
+                else:
+                    model = SimSiam(
+                        backbone=backbone,
+                        projection=projection_head_conv(
+                            batch_norm_output=True,
+                            flatten_output=False),
+                        predictor=projection_head_conv())
 
         elif FLAGS.model == 'supervised':
             model = tf.keras.Sequential(
