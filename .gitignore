@@ -1,6 +1,7 @@
 *.json
 *.hdf5
 *.csv
+*.cfg
 
 # Python cache
 **/__pycache__
