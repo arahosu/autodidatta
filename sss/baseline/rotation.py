@@ -1,8 +1,11 @@
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import CSVLogger
 
 from absl import app
+import os
+from datetime import datetime
 
 from sss.utils import setup_accelerator
 from sss.vgg import VGG_UNet_Encoder, VGG_UNet_Decoder
@@ -166,7 +169,7 @@ def main(argv):
         model = RotationPrediction(
             input_shape=ds_shape,
             classifier=classifier,
-            tune_decoder_only=False)
+            tune_decoder_only=FLAGS.finetune_decoder_only)
 
         loss = tversky_loss
         dice_metrics = [DiceMetrics(idx=idx) for idx in range(num_classes)]
@@ -196,12 +199,30 @@ def main(argv):
                       loss=loss,
                       metrics=metrics)
 
+    # Define checkpoints
+    time = datetime.now().strftime("%Y%m%d-%H%M%S")
+    cb = None
+
+    if FLAGS.save_history:
+        histdir = os.path.join(FLAGS.histdir, time)
+        os.mkdir(histdir)
+
+        # Create a callback for saving the training results into a csv file
+        histfile = 'rotation_results.csv'
+        csv_logger = CSVLogger(os.path.join(histdir, histfile))
+        cb = [csv_logger]
+
+        # Save flag params in a flag file in the same subdirectory
+        flagfile = os.path.join(histdir, 'train_flags.cfg')
+        FLAGS.append_flags_into_file(flagfile)
+
     model.fit(train_ds,
               steps_per_epoch=steps_per_epoch,
               epochs=FLAGS.train_epochs,
               validation_data=val_ds,
               validation_steps=validation_steps,
-              verbose=2)
+              verbose=2,
+              callbacks=cb)
 
 
 if __name__ == '__main__':
