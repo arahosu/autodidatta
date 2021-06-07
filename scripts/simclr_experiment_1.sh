@@ -1,7 +1,7 @@
 # SimCLR Experiments 
 # Brightness = 0.1
 # Contrast = 0.1
-# Gamma = (0.5, 1.0)
+# Gamma = (0.5, 2.0)
 # Noise = 0.1 
 # Jitter prob = 0.5
 # Crop factor = (0.5625, 1.0)
