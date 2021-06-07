@@ -167,7 +167,6 @@ def jigsaw(image, patches_per_side=3, num_labels=64):
     new_list = [list(perm[i]) for i in range(len(perm))]
     if num_labels <= len(perm):
         new_list = new_list[-num_labels:]
-    # rand_label_idx = tf.random.uniform([], 1, len(new_list), tf.int32)
     rand_label_idx = np.random.randint(0, len(new_list))
     patch_list = [patch_list[i] for i in new_list[rand_label_idx]]
 
@@ -182,7 +181,6 @@ def jigsaw(image, patches_per_side=3, num_labels=64):
             shuffle_image = a
             idx += 1
 
-    # rand_label_idx += 1
     rand_label_idx = tf.cast(rand_label_idx, tf.float32)
 
     return shuffle_image, rand_label_idx
