@@ -202,7 +202,6 @@ def jigsaw(image, sample_perms):
             shuffle_image = a
             idx += 1
 
-    # rand_label_idx += 1
     rand_label_idx = tf.cast(rand_label_idx, tf.float32)
 
     return shuffle_image, rand_label_idx
