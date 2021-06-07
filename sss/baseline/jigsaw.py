@@ -14,12 +14,14 @@ from sss.losses import tversky_loss
 from sss.utils import LearningRateSchedule
 from sss.baseline.flags import FLAGS
 from sss.baseline.rotation import RotationPrediction
+from sss.augmentation.base import sample_permutations
 
 
 class Jigsaw(RotationPrediction):
 
     def __init__(self,
                  input_shape,
+                 num_pretext_classes,
                  classifier=None,
                  tune_decoder_only=False):
 
@@ -32,7 +34,7 @@ class Jigsaw(RotationPrediction):
         self.pretext_classifier = tf.keras.Sequential(
             [
                 tfkl.Flatten(),
-                tfkl.Dense(64, activation='softmax')
+                tfkl.Dense(num_pretext_classes, activation='softmax')
             ]
         )
 
@@ -106,6 +108,8 @@ def main(argv):
                                  FLAGS.num_cores,
                                  FLAGS.tpu)
 
+    sample_perms = sample_permutations(9)
+
     train_ds, val_ds = load_dataset(
             batch_size=FLAGS.batch_size,
             dataset_dir='gs://oai-challenge-dataset/tfrecords',
@@ -114,6 +118,7 @@ def main(argv):
             multi_class=FLAGS.multi_class,
             add_background=FLAGS.add_background,
             normalize=FLAGS.normalize,
+            permutations=sample_perms,
             buffer_size=int(19200 * FLAGS.fraction_data),
             parse_fn=parse_fn_restore)
 
@@ -141,6 +146,7 @@ def main(argv):
 
         model = Jigsaw(
             input_shape=ds_shape,
+            num_pretext_classes=1000,
             classifier=classifier,
             tune_decoder_only=FLAGS.finetune_decoder_only)
 
@@ -194,7 +200,7 @@ def main(argv):
               epochs=FLAGS.train_epochs,
               validation_data=val_ds,
               validation_steps=validation_steps,
-              verbose=2,
+              verbose=1,
               callbacks=cb)
 
 

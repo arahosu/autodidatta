@@ -2,7 +2,7 @@ import tensorflow as tf
 import os
 from functools import partial
 
-from sss.augmentation.base import jigsaw
+from sss.augmentation.base import jigsaw, random_crop_with_resize
 from sss.augmentation.dual_transform import get_preprocess_fn
 AUTOTUNE = tf.data.AUTOTUNE
 
@@ -145,7 +145,8 @@ def parse_fn_restore(example_proto,
                      is_training,
                      multi_class,
                      add_background,
-                     normalize):
+                     normalize,
+                     permutations):
 
     features = {
         'height': tf.io.FixedLenFeature([], tf.int64),
@@ -170,22 +171,33 @@ def parse_fn_restore(example_proto,
     tf.debugging.check_numerics(image, "Invalid value in your input!")
     tf.debugging.check_numerics(seg, "Invalid value in your label!")
 
-    preprocess_fn_finetune = get_preprocess_fn(
-        is_training=is_training, is_pretrain=False, image_size=288)
+    # preprocess_fn_finetune = get_preprocess_fn(
+    #     is_training=is_training, is_pretrain=False, image_size=288)
 
-    image, seg = preprocess_fn_finetune(
-            image=image, mask=seg)
+    # image, seg = preprocess_fn_finetune(
+    #         image=image, mask=seg)
 
     if normalize:
         image = normalize_image(image)
 
     combined_img = tf.concat([image, seg], axis=-1)
     if is_training:
-        combined_image_shuffle, label = jigsaw(combined_img)
-        image_shuffle = combined_image_shuffle[..., 0]
+        combined_img_cropped = random_crop_with_resize(
+            combined_img, [288, 288], area_range=(0.5625, 1.0))
+        combined_img_cropped = tf.reshape(
+            combined_img_cropped, [288, 288, combined_img.shape[-1]])
+        combined_image_shuffle, label = jigsaw(
+            combined_img_cropped, permutations)
+        image = combined_image_shuffle[..., 0]
         seg = combined_image_shuffle[..., 1:]
+        image = tf.expand_dims(image, -1)
+        image_shuffle = image
     else:
-        image_shuffle, label = jigsaw(image)
+        image = tf.image.resize_with_crop_or_pad(
+            image, 288, 288)
+        seg = tf.image.resize_with_crop_or_pad(
+            seg, 288, 288)
+        image_shuffle, label = jigsaw(image, permutations)
 
     if multi_class:
         if add_background:
@@ -203,6 +215,7 @@ def read_tfrecord(tfrecords_dir,
                   multi_class,
                   add_background,
                   normalize,
+                  permutations=None,
                   parse_fn=parse_fn_2d):
 
     """This function reads and returns TFRecords dataset in tf.data.Dataset format
@@ -247,13 +260,15 @@ def read_tfrecord(tfrecords_dir,
                 normalize=normalize),
             num_parallel_calls=AUTOTUNE)
     elif parse_fn == parse_fn_restore:
+        assert permutations is not None, 'Permutations cannot be None'
         dataset = dataset.map(
             partial(
                 parse_fn,
                 is_training=is_training,
                 multi_class=multi_class,
                 add_background=add_background,
-                normalize=normalize),
+                normalize=normalize,
+                permutations=permutations),
             num_parallel_calls=AUTOTUNE)
 
     dataset = dataset.batch(batch_size, drop_remainder=True).prefetch(AUTOTUNE)
@@ -276,6 +291,7 @@ def load_dataset(batch_size,
                  multi_class,
                  add_background,
                  normalize,
+                 permutations=None,
                  buffer_size=19200,
                  parse_fn=parse_fn_2d):
 
@@ -296,6 +312,7 @@ def load_dataset(batch_size,
         multi_class=multi_class,
         add_background=add_background,
         normalize=normalize,
+        permutations=permutations,
         parse_fn=parse_fn
         )
 
@@ -309,6 +326,7 @@ def load_dataset(batch_size,
         multi_class=multi_class,
         add_background=add_background,
         normalize=normalize,
+        permutations=permutations,
         parse_fn=parse_fn
         )
 

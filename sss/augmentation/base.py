@@ -1,6 +1,9 @@
 import tensorflow as tf
 import itertools
 import numpy as np
+from tensorflow_addons.image import translate
+from scipy.spatial.distance import cdist
+import math
 
 
 def random_apply(func, p, x):
@@ -151,7 +154,29 @@ def random_blur(image, image_size, p=1.0):
     return random_apply(_transform, p=p, x=image)
 
 
-def jigsaw(image, patches_per_side=3, num_labels=64):
+def sample_permutations(idx_len, num_idx=1000, min_hamming_distance=8):
+    indices = [i for i in range(idx_len)]
+    perm = list(itertools.permutations(indices))
+    new_list = [list(perm[i]) for i in range(len(perm))]
+    list_a = np.reshape(new_list[0], (1, len(new_list[0])))
+
+    sample_perms = []
+
+    while len(sample_perms) < num_idx:
+        rand_idx = np.random.randint(1, len(new_list))
+        list_b = np.reshape(new_list[rand_idx], (1, len(new_list[0])))
+        distance = cdist(list_a, list_b, metric='hamming')
+        distance *= idx_len
+        if distance >= 8:
+            list_b = list(np.squeeze(list_b))
+            sample_perms.append(list_b)
+
+    return sample_perms
+
+
+def jigsaw(image, sample_perms):
+    patches_per_side = int(math.sqrt(len(sample_perms[0])))
+
     M = int(image.shape[0] // patches_per_side)
     N = int(image.shape[1] // patches_per_side)
     patch_list = []
@@ -160,16 +185,11 @@ def jigsaw(image, patches_per_side=3, num_labels=64):
     for x in range(0, image.shape[0], M):
         for y in range(0, image.shape[1], N):
             patch = image[x:x+M, y:y+N, :]
+            patch = translate(patch, [8, 8])
             patch_list.append(patch)
 
-    indices = [i for i in range(patches_per_side*patches_per_side)]
-    perm = list(itertools.permutations(indices))
-    new_list = [list(perm[i]) for i in range(len(perm))]
-    if num_labels <= len(perm):
-        new_list = new_list[-num_labels:]
-    # rand_label_idx = tf.random.uniform([], 1, len(new_list), tf.int32)
-    rand_label_idx = np.random.randint(0, len(new_list))
-    patch_list = [patch_list[i] for i in new_list[rand_label_idx]]
+    rand_label_idx = np.random.randint(0, len(sample_perms))
+    patch_list = [patch_list[i] for i in sample_perms[rand_label_idx]]
 
     idx = 0
     for x in range(0, image.shape[0], M):
