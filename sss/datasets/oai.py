@@ -197,66 +197,6 @@ def parse_fn_restore(example_proto,
     return (image, seg, image_shuffle, label)
 
 
-def parse_fn_viz(example_proto,
-                 training_mode,
-                 is_training,
-                 multi_class,
-                 add_background,
-                 normalize):
-
-    features = {
-        'height': tf.io.FixedLenFeature([], tf.int64),
-        'width': tf.io.FixedLenFeature([], tf.int64),
-        'num_channels': tf.io.FixedLenFeature([], tf.int64),
-        'image_raw': tf.io.FixedLenFeature([], tf.string),
-        'label_raw': tf.io.FixedLenFeature([], tf.string)
-    }
-
-    # Parse the input tf.Example proto using the dictionary above.
-    image_features = tf.io.parse_single_example(example_proto, features)
-    image_raw = tf.io.decode_raw(image_features['image_raw'], tf.float32)
-    image = tf.cast(tf.reshape(image_raw, [384, 384, 1]), tf.float32)
-
-    if normalize:
-        image = normalize_image(image)
-
-    seg_raw = tf.io.decode_raw(image_features['label_raw'], tf.int8)
-    seg = tf.reshape(seg_raw, [384, 384, 6])
-    if not multi_class:
-        seg = tf.math.reduce_sum(seg, axis=-1)
-        seg = tf.expand_dims(seg, -1)
-    seg = tf.cast(seg, tf.float32)
-    seg = tf.clip_by_value(seg, 0., 1.)
-
-    tf.debugging.check_numerics(image, "Invalid value in your input!")
-    tf.debugging.check_numerics(seg, "Invalid value in your label!")
-
-    preprocess_fn_pretrain = get_preprocess_fn(
-        is_training=is_training, is_pretrain=True, image_size=288)
-    preprocess_fn_finetune = get_preprocess_fn(
-        is_training=is_training, is_pretrain=False, image_size=288)
-
-    if training_mode == 'pretrain':
-        image1, seg1 = preprocess_fn_pretrain(
-            image=image, mask=seg)
-        image2, seg2 = preprocess_fn_pretrain(
-            image=image, mask=seg)
-
-        image_concat = tf.concat([image1, image2], -1)
-        if multi_class:
-            if add_background:
-                seg1, seg2 = background(seg1), background(seg2)
-        seg_concat = tf.concat([seg1, seg2], -1)
-        return (image, seg, image_concat, seg_concat)
-    else:
-        image, seg = preprocess_fn_finetune(
-            image=image, mask=seg)
-        if multi_class:
-            if add_background:
-                seg = background(seg)
-        return (image, seg)
-
-
 def read_tfrecord(tfrecords_dir,
                   batch_size,
                   buffer_size,

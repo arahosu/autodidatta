@@ -2,6 +2,7 @@
 *.hdf5
 *.csv
 *.cfg
+*.txt
 
 # Python cache
 **/__pycache__
