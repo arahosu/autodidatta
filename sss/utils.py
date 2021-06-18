@@ -82,3 +82,11 @@ class LearningRateSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
             'steps_per_epoch': self.steps_per_epoch,
             'initial_learning_rate': self.initial_learning_rate,
         }
+
+
+def min_max_standardize(image):
+
+    denom = tf.math.reduce_max(image) - tf.math.reduce_min(image)
+    num = image - tf.math.reduce_min(image)
+
+    return num / denom

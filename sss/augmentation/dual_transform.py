@@ -108,6 +108,8 @@ def preprocess_for_train(image,
         new_image = tf.reshape(
             new_image, [image_size[0], image_size[1], num_image_ch])
         mask = tf.reshape(mask, [image_size[0], image_size[1], mask_shape[-1]])
+    else:
+        new_image = image
 
     return new_image, mask
 
@@ -136,6 +138,8 @@ def preprocess_for_eval(image,
             new_image, [image_size[0], image_size[1], num_image_ch])
         mask = tf.reshape(
             mask, [image_size[0], image_size[1], mask_shape[-1]])
+    else:
+        new_image = image
 
     return new_image, mask
 

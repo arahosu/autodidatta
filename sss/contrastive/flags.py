@@ -2,8 +2,9 @@ from absl import flags
 
 # Dataset
 flags.DEFINE_enum(
-    'dataset', 'oai', ['cifar10', 'brats', 'oai'],
-    'cifar10 (default), BraTS, oai')
+    'dataset', 'oai_challenge',
+    ['cifar10', 'brats', 'oai_challenge', 'oai_full'],
+    'cifar10, BraTS, oai_challenge (default), oai_full')
 flags.DEFINE_integer(
     'image_size',
     288,

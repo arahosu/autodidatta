@@ -12,6 +12,7 @@ from datetime import datetime
 from sss.contrastive.flags import FLAGS
 from sss.datasets.cifar10 import load_input_fn
 from sss.datasets.oai import load_dataset
+from sss.datasets.oai_unlabelled import load_oai_full_dataset
 from sss.network import projection_head, predictor_head, projection_head_conv
 from sss.resnet import ResNet18, ResNet34, ResNet50
 from sss.vgg import VGG_UNet
@@ -75,11 +76,6 @@ def main(argv):
         validation_steps = 4480 // FLAGS.batch_size
         ds_shape = (FLAGS.image_size, FLAGS.image_size, 1)
 
-        for (image, seg) in train_ds:
-            tf.debugging.check_numerics(image, 'NaN values in image')
-            tf.debugging.check_numerics(seg, 'NaN values in seg')
-            break
-
         if not FLAGS.multi_class:
             activation = 'sigmoid'
             num_classes = 1
@@ -91,6 +87,17 @@ def main(argv):
                 activation = 'sigmoid'
                 num_classes = 6
 
+    elif FLAGS.dataset == 'oai_full':
+        train_ds, val_ds = load_oai_full_dataset(
+            'dicom_files.txt',
+            batch_size=FLAGS.batch_size,
+            train_split=0.360,
+            drop_remainder=True)
+
+        steps_per_epoch = int(7786206 * 0.640) // FLAGS.batch_size
+        validation_steps = int(7786206 * 0.360) // FLAGS.batch_size
+        ds_shape = (288, 288, 1)
+
     with strategy.scope():
         # load model
         if FLAGS.dataset == 'cifar10':
@@ -100,7 +107,7 @@ def main(argv):
                 backbone = ResNet34(input_shape=ds_shape)
             elif FLAGS.backbone == 'resnet18':
                 backbone = ResNet18(input_shape=ds_shape)
-        elif FLAGS.dataset in ['oai', 'brats']:
+        elif FLAGS.dataset in ['oai', 'brats', 'oai_full']:
             backbone = VGG_UNet(input_shape=ds_shape)
 
         if FLAGS.online_ft:
@@ -123,7 +130,7 @@ def main(argv):
                 loss = tf.keras.losses.sparse_categorical_crossentropy
                 metrics = ['acc']
 
-            elif FLAGS.dataset in ['oai', 'brats']:
+            elif FLAGS.dataset in ['oai', 'brats', 'oai_full']:
 
                 classifier = tfkl.Conv2D(
                     num_classes, (1, 1),
