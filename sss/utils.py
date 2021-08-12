@@ -2,6 +2,34 @@ import tensorflow as tf
 from tensorflow.config.experimental import list_logical_devices, \
     set_visible_devices, list_physical_devices
 
+class LocalTPUClusterResolver(
+    tf.distribute.cluster_resolver.TPUClusterResolver):
+    """LocalTPUClusterResolver."""
+    def __init__(self):
+        self._tpu = ''
+        self.task_type = 'worker'
+        self.task_id = 0
+
+    def master(self, task_type=None, task_id=None, rpc_layer=None):
+        return None
+
+    def cluster_spec(self):
+        return tf.train.ClusterSpec({})
+
+    def get_tpu_system_metadata(self):
+        return tf.tpu.experimental.TPUSystemMetadata(
+            num_cores=8,
+            num_hosts=1,
+            num_of_cores_per_host=8,
+            topology=None,
+            devices=tf.config.list_logical_devices())
+
+    def num_accelerators(self,
+                         task_type=None,
+                         task_id=None,
+                         config_proto=None):
+        return {'TPU': 8}
+
 
 def setup_accelerator(use_gpu, num_cores, device_name=None):
 
@@ -28,10 +56,10 @@ def setup_accelerator(use_gpu, num_cores, device_name=None):
                     # Visible devices must be set before GPUs are initialized
                     print(e)
     else:
-        print('Use TPU at %s',
-              device_name if device_name is not None else 'local')
+        print('Use TPU at {}'.format(device_name))
         resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
             tpu=device_name)
+        # resolver = LocalTPUClusterResolver()
         tf.config.experimental_connect_to_cluster(resolver)
         tf.tpu.experimental.initialize_tpu_system(resolver)
         strategy = tf.distribute.TPUStrategy(resolver)
