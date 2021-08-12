@@ -1,6 +1,9 @@
 import tensorflow as tf
 import tensorflow_io as tfio
 
+import time
+import datetime
+
 from sss.augmentation.dual_transform import get_preprocess_fn
 from sss.utils import min_max_standardize
 AUTOTUNE = tf.data.AUTOTUNE
@@ -84,8 +87,10 @@ def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
         elif keyword is None:
             filelist.append(line)
     
+    num_files = len(filelist)
+    start_time = time.time()
+
     with tf.io.TFRecordWriter(dest_file) as writer:
-        
         for idx, f in enumerate(filelist):
             image_bytes = tf.io.read_file(f)
             image = tfio.image.decode_dicom_image(image_bytes, dtype=tf.uint16)
@@ -93,17 +98,25 @@ def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
             image = image[0, ...]
 
             image_raw = image.tobytes()
+            patientid = tfio.image.decode_dicom_data(image_bytes, tags=tfio.image.dicom_tags.PatientID) 
             
             feature = {
-                'image_raw': _bytes_feature(image_raw)
+                'image_raw': _bytes_feature(image_raw),
+                'patient_id': _bytes_feature(patientid)
+
             }
             example = tf.train.Example(features=tf.train.Features(feature=feature))
             writer.write(example.SerializeToString())
 
+            current_time = time.time()
+            elapsed_time = current_time - start_time
+            approx_total_time = elapsed_time * (num_files / (idx + 1))
+            remaining_time = int(approx_total_time - elapsed_time)
+
             if idx % 100 == 0:
-                print(f'{idx+1} out of {len(filelist)} images have been processed.')
-        
+                print(f'{idx+1} out of {num_files} images have been processed.')
+                print('remaining time: {}'.format(str(datetime.timedelta(seconds=remaining_time))))
 
 if __name__ == '__main__':
 
-    convert_dicom_to_tfrecords("dicom_files.txt", "00m", "01-of-09.tfrecords")
+    convert_dicom_to_tfrecords("dicom_files.txt", "00m", "01-of-09.tfrecords")\
