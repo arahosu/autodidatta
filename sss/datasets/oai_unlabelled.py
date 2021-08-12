@@ -6,6 +6,23 @@ from sss.utils import min_max_standardize
 AUTOTUNE = tf.data.AUTOTUNE
 
 
+def _bytes_feature(value):
+  """Returns a bytes_list from a string / byte."""
+  if isinstance(value, type(tf.constant(0))):
+    value = value.numpy() # BytesList won't unpack a string from an EagerTensor.
+  return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+
+def _float_feature(value):
+  """Returns a float_list from a float / double."""
+  return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
+
+
+def _int64_feature(value):
+  """Returns an int64_list from a bool / enum / int / uint."""
+  return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))  
+
+
 def load_oai_full_dataset(text_file,
                           batch_size,
                           image_size,
@@ -29,7 +46,6 @@ def load_oai_full_dataset(text_file,
         image_bytes = tf.io.read_file(line)
         image = tfio.image.decode_dicom_image(image_bytes, dtype=tf.uint16)
         image = tf.cast(image, tf.float32)
-        image = image[0, ...]
         image = min_max_standardize(image)
         image = tf.reshape(image, [384, 384, 1])
         preprocess_fn = get_preprocess_fn(is_training, True, 288)
@@ -56,10 +72,38 @@ def load_oai_full_dataset(text_file,
     return train_ds, val_ds
 
 
+def convert_dicom_to_tfrecords(text_file, keyword, dest_file):    
+    # filter the text file according to keyword
+    text_file = open(text_file, "r")
+    lines = text_file.readlines()
+    filelist = []
+    for filename in lines:
+        line = filename[:-1]
+        if keyword in line:
+            filelist.append(line)
+        elif keyword is None:
+            filelist.append(line)
+    
+    with tf.io.TFRecordWriter(dest_file) as writer:
+        
+        for idx, f in enumerate(filelist):
+            image_bytes = tf.io.read_file(f)
+            image = tfio.image.decode_dicom_image(image_bytes, dtype=tf.uint16)
+            image = image.numpy()
+            image = image[0, ...]
+
+            image_raw = image.tobytes()
+            
+            feature = {
+                'image_raw': _bytes_feature(image_raw)
+            }
+            example = tf.train.Example(features=tf.train.Features(feature=feature))
+            writer.write(example.SerializeToString())
+
+            if idx % 100 == 0:
+                print(f'{idx+1} out of {len(filelist)} images have been processed.')
+        
+
 if __name__ == '__main__':
 
-    train_ds, _ = load_oai_full_dataset("dicom_files.txt", 32, 288)
-
-    for image in train_ds:
-        print(image.shape)
-        break
+    convert_dicom_to_tfrecords("dicom_files.txt", "00m", "01-of-09.tfrecords")

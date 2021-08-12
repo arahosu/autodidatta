@@ -56,7 +56,7 @@ def main(argv):
         validation_steps = num_val_examples // FLAGS.batch_size
         ds_shape = (FLAGS.image_size, FLAGS.image_size, 3)
 
-    elif FLAGS.dataset == 'oai':
+    elif FLAGS.dataset == 'oai_challenge':
         if FLAGS.model == 'supervised':
             training_mode = 'finetune'
         else:
@@ -130,7 +130,7 @@ def main(argv):
                 loss = tf.keras.losses.sparse_categorical_crossentropy
                 metrics = ['acc']
 
-            elif FLAGS.dataset in ['oai', 'brats', 'oai_full']:
+            elif FLAGS.dataset in ['oai_challenge', 'brats', 'oai_full']:
 
                 classifier = tfkl.Conv2D(
                     num_classes, (1, 1),
