@@ -10,20 +10,21 @@ AUTOTUNE = tf.data.AUTOTUNE
 
 
 def _bytes_feature(value):
-  """Returns a bytes_list from a string / byte."""
-  if isinstance(value, type(tf.constant(0))):
-    value = value.numpy() # BytesList won't unpack a string from an EagerTensor.
-  return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+    """Returns a bytes_list from a string / byte."""
+    if isinstance(value, type(tf.constant(0))):
+        value = value.numpy()
+        # BytesList won't unpack a string from an EagerTensor.
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
 def _float_feature(value):
-  """Returns a float_list from a float / double."""
-  return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
+    """Returns a float_list from a float / double."""
+    return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
 
 
 def _int64_feature(value):
-  """Returns an int64_list from a bool / enum / int / uint."""
-  return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))  
+    """Returns an int64_list from a bool / enum / int / uint."""
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
 
 def load_oai_full_dataset(text_file,
@@ -75,7 +76,7 @@ def load_oai_full_dataset(text_file,
     return train_ds, val_ds
 
 
-def convert_dicom_to_tfrecords(text_file, keyword, dest_file):    
+def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
     # filter the text file according to keyword
     text_file = open(text_file, "r")
     lines = text_file.readlines()
@@ -86,7 +87,7 @@ def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
             filelist.append(line)
         elif keyword is None:
             filelist.append(line)
-    
+
     num_files = len(filelist)
     start_time = time.time()
 
@@ -97,26 +98,35 @@ def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
             image = image.numpy()
             image = image[0, ...]
 
-            image_raw = image.tobytes()
-            patientid = tfio.image.decode_dicom_data(image_bytes, tags=tfio.image.dicom_tags.PatientID) 
-            
-            feature = {
-                'image_raw': _bytes_feature(image_raw),
-                'patient_id': _bytes_feature(patientid)
+            if image.ndim == 4:
 
-            }
-            example = tf.train.Example(features=tf.train.Features(feature=feature))
-            writer.write(example.SerializeToString())
+                image_raw = image.tobytes()
+                patientid = tfio.image.decode_dicom_data(
+                    image_bytes, tags=tfio.image.dicom_tags.PatientID)
 
-            current_time = time.time()
-            elapsed_time = current_time - start_time
-            approx_total_time = elapsed_time * (num_files / (idx + 1))
-            remaining_time = int(approx_total_time - elapsed_time)
+                feature = {
+                    'image_raw': _bytes_feature(image_raw),
+                    'patient_id': _bytes_feature(patientid)
 
-            if idx % 100 == 0:
-                print(f'{idx+1} out of {num_files} images have been processed.')
-                print('remaining time: {}'.format(str(datetime.timedelta(seconds=remaining_time))))
+                }
+                example = tf.train.Example(
+                    features=tf.train.Features(feature=feature))
+                writer.write(example.SerializeToString())
+
+                current_time = time.time()
+                elapsed_time = current_time - start_time
+                approx_total_time = elapsed_time * (num_files / (idx + 1))
+                remaining_time = int(approx_total_time - elapsed_time)
+
+                if idx % 100 == 0:
+                    print(f'{idx+1} out of {num_files} images processed.')
+                    time_remaining = str(
+                        datetime.timedelta(seconds=remaining_time))
+                    print('remaining time: {}'.format(time_remaining))
+            else:
+                print('Invalid DICOM file found at idx: {}'.format(idx))
+
 
 if __name__ == '__main__':
 
-    convert_dicom_to_tfrecords("dicom_files.txt", "00m", "01-of-09.tfrecords")\
+    # convert_dicom_to_tfrecords("dicom_files.txt", "00m", "01-of-09.tfrecords")
