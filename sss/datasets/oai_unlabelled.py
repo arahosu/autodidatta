@@ -3,6 +3,8 @@ import tensorflow_io as tfio
 
 import time
 import datetime
+import os
+from functools import partial
 
 from sss.augmentation.dual_transform import get_preprocess_fn
 from sss.utils import min_max_standardize
@@ -27,53 +29,81 @@ def _int64_feature(value):
     return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
 
-def load_oai_full_dataset(text_file,
-                          batch_size,
-                          image_size,
-                          train_split=0.640,
-                          drop_remainder=True):
-
-    # save the text file in a list
-    text_file = open(text_file, "r")
-    lines = text_file.readlines()
-    filelist = []
-    for filename in lines:
-        line = filename[:-1]
-        filelist.append(line)
-
-    # split the filelist into training and validation filelists
-    num_train = int(len(filelist)*train_split)
-    train_list = filelist[-num_train:]
-    val_list = filelist[:-num_train]
-
-    def read_dicom_file(line, is_training):
-        image_bytes = tf.io.read_file(line)
-        image = tfio.image.decode_dicom_image(image_bytes, dtype=tf.uint16)
-        image = tf.cast(image, tf.float32)
+def parse_fn(example_proto,
+             is_training,
+             normalize):
+        
+    features = {
+                'image_raw': tf.io.FixedLenFeature([], tf.string),
+                'patient_id': tf.io.FixedLenFeature([], tf.int64)
+                }
+    
+    # Parse the input tf.Example proto using the dictionary above.
+    image_features = tf.io.parse_single_example(example_proto, features)
+    image_raw = tf.io.decode_raw(image_features['image_raw'], tf.int16)
+    image = tf.cast(tf.reshape(image_raw, [384, 384, 1]), tf.float32)
+    patient_id = image_features['patient_id']
+    
+    if normalize:
         image = min_max_standardize(image)
-        image = tf.reshape(image, [384, 384, 1])
-        preprocess_fn = get_preprocess_fn(is_training, True, 288)
-        image1, _ = preprocess_fn(image, mask=None)
-        image2, _ = preprocess_fn(image, mask=None)
 
-        image = tf.concat([image1, image2], -1)
-        return image
+    preprocess_fn = get_preprocess_fn(is_training, True, 288)
 
-    train_ds = tf.data.Dataset.from_tensor_slices(train_list)
-    train_ds = train_ds.shuffle(buffer_size=len(train_list)).repeat()
-    train_ds = train_ds.map(
-        lambda x: read_dicom_file(x, True), num_parallel_calls=AUTOTUNE)
-    train_ds = train_ds.batch(
-        batch_size=batch_size, drop_remainder=drop_remainder)
-    train_ds = train_ds.prefetch(AUTOTUNE)
+    image1, _ = preprocess_fn(image, mask=None)
+    image2, _ = preprocess_fn(image, mask=None)
 
-    val_ds = tf.data.Dataset.from_tensor_slices(val_list)
-    val_ds = val_ds.map(
-        lambda x: read_dicom_file(x, False), num_parallel_calls=AUTOTUNE)
-    val_ds = val_ds.batch(batch_size=batch_size, drop_remainder=drop_remainder)
-    val_ds = val_ds.prefetch(AUTOTUNE)
+    image = tf.concat([image1, image2], -1)
+    return image
 
-    return train_ds, val_ds
+
+def read_tfrecord(tfrecords_dir,
+                  is_training,
+                  batch_size,
+                  normalize,
+                  buffer_size,
+                  drop_remainder=True):
+    
+    file_list = tf.io.matching_files(os.path.join(tfrecords_dir, '*-*'))
+    shards = tf.data.Dataset.from_tensor_slices(file_list)
+
+    if is_training:
+        shards = shards.shuffle(tf.cast(tf.shape(file_list)[0], tf.int64))
+        cycle_length = 8
+    else:
+        cycle_length = 1
+
+    shards = shards.repeat()
+    dataset = shards.interleave(tf.data.TFRecordDataset,
+                                cycle_length=cycle_length,
+                                num_parallel_calls=AUTOTUNE)
+
+    if is_training:
+        dataset = dataset.shuffle(buffer_size=buffer_size)
+
+    dataset = dataset.map(
+            partial(
+                parse_fn,
+                is_training=is_training,
+                normalize=normalize),
+            num_parallel_calls=AUTOTUNE)
+
+    dataset = dataset.batch(batch_size, drop_remainder=True).prefetch(AUTOTUNE)
+
+    return dataset
+
+
+def load_oai_full_dataset(tfrecords_dir,
+                          batch_size,
+                          normalize,
+                          buffer_size):
+    
+    train_ds = read_tfrecord(tfrecords_dir,
+                             True,
+                             batch_size,
+                             normalize,
+                             buffer_size)
+    
+    return train_ds
 
 
 def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
@@ -103,10 +133,11 @@ def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
                 image_raw = image.tobytes()
                 patientid = tfio.image.decode_dicom_data(
                     image_bytes, tags=tfio.image.dicom_tags.PatientID)
+                patientid = tf.strings.to_number(patientid, tf.int64)
 
                 feature = {
                     'image_raw': _bytes_feature(image_raw),
-                    'patient_id': _bytes_feature(patientid)
+                    'patient_id': _int64_feature(patientid)
 
                 }
                 example = tf.train.Example(
@@ -130,3 +161,7 @@ def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
 if __name__ == '__main__':
 
     # convert_dicom_to_tfrecords("dicom_files.txt", "00m", "01-of-09.tfrecords")
+    ds = load_oai_full_dataset('gs://oai-challenge-dataset/data/tfrecords',
+                               1024,
+                               True,
+                               5000)
