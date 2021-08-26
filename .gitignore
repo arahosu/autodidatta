@@ -4,6 +4,7 @@
 *.cfg
 *.txt
 *.tfrecords
+*.ipynb
 
 # Python cache
 **/__pycache__
