@@ -4,7 +4,10 @@
 *.cfg
 *.txt
 *.tfrecords
+<<<<<<< HEAD
 *.ipynb
+=======
+>>>>>>> c957afad119fed2c9b6516f78325a067fce6bad7
 
 # Python cache
 **/__pycache__

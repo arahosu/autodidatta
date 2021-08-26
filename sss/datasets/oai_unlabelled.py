@@ -106,6 +106,7 @@ def load_oai_full_dataset(tfrecords_dir,
     return train_ds
 
 
+<<<<<<< HEAD
 def count_dicom_files(text_file, keyword):
 
     # filter the text file according to keyword
@@ -136,6 +137,8 @@ def count_dicom_files(text_file, keyword):
     
     return counter
 
+=======
+>>>>>>> c957afad119fed2c9b6516f78325a067fce6bad7
 def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
     # filter the text file according to keyword
     text_file = open(text_file, "r")
@@ -191,6 +194,7 @@ def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
 if __name__ == '__main__':
 
     # convert_dicom_to_tfrecords("dicom_files.txt", "00m", "01-of-09.tfrecords")
+<<<<<<< HEAD
     # ds = load_oai_full_dataset('gs://oai-challenge-dataset/data/tfrecords',
     #                            1024,
     #                            True,
@@ -198,3 +202,9 @@ if __name__ == '__main__':
 
     count = count_dicom_files('dicom_files.txt', "00m/0.C.2")
     print(count)
+=======
+    ds = load_oai_full_dataset('gs://oai-challenge-dataset/data/tfrecords',
+                               1024,
+                               True,
+                               5000)
+>>>>>>> c957afad119fed2c9b6516f78325a067fce6bad7
