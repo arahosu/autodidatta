@@ -2,6 +2,7 @@ import tensorflow as tf
 from tensorflow.config.experimental import list_logical_devices, \
     set_visible_devices, list_physical_devices
 
+
 class LocalTPUClusterResolver(
     tf.distribute.cluster_resolver.TPUClusterResolver):
     """LocalTPUClusterResolver."""
