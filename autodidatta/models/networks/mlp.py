@@ -28,7 +28,6 @@ def predictor_head(hidden_dim=2048,
                    num_layers=1):
 
     model = tf.keras.Sequential()
-    model.add(tfkl.Flatten())
 
     for _ in range(num_layers):
         model.add(tfkl.Dense(hidden_dim, use_bias=False))
