@@ -101,13 +101,14 @@ class RandomGamma(ImageOnlyOps):
     def call(self, inputs, training=True):
 
         random_gamma = tf.random.uniform(
-            [], self.lower_gamma, self.upper_gamma, sed=self.seed)
+            [], self.lower_gamma, self.upper_gamma, seed=self.seed)
         random_gain = tf.random.uniform(
             [], self.lower_gain, self.upper_gain, seed=self.seed)
 
         if training:
-            return tf.image.adjust_gamma(
-                inputs, random_gamma, random_gain)
+            image = random_gain * tf.math.sign(inputs) * \
+                (tf.math.abs(inputs) + 1e-08)**random_gamma
+            return image
         else:
             return inputs
 
