@@ -130,6 +130,37 @@ def load_oai_full_dataset(tfrecords_dir,
     return train_ds
 
 
+def count_dicom_files(text_file, keyword):
+
+    # filter the text file according to keyword
+    text_file = open(text_file, "r")
+    lines = text_file.readlines()
+    filelist = []
+    for filename in lines:
+        line = filename[:-1]
+        if keyword in line:
+            filelist.append(line)
+        elif keyword is None:
+            filelist.append(line)
+
+    num_files = len(filelist)
+    print('Number of DICOM files detected: {}'.format(num_files))
+
+    counter = 0
+
+    for idx, f in enumerate(filelist):
+        image_bytes = tf.io.read_file(f)
+        image = tfio.image.decode_dicom_image(image_bytes, dtype=tf.uint16)
+
+        if tf.rank(image) == 4:
+            counter += 1 
+        
+        if idx % 100 == 0:
+            print('{} out of {} images processed'.format(idx+1, num_files))
+    
+    return counter
+
+
 def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
     # filter the text file according to keyword
     text_file = open(text_file, "r")
@@ -185,11 +216,27 @@ def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
 if __name__ == '__main__':
 
     # convert_dicom_to_tfrecords("dicom_files.txt", "00m", "01-of-09.tfrecords")
+<<<<<<< HEAD
     """
+=======
+<<<<<<< HEAD
+    # ds = load_oai_full_dataset('gs://oai-challenge-dataset/data/tfrecords',
+    #                            1024,
+    #                            True,
+    #                            5000)
+
+    count = count_dicom_files('dicom_files.txt', "00m/0.C.2")
+    print(count)
+=======
+>>>>>>> 4853df860fab629733ac6d0d77f93edb60e807b1
     ds = load_oai_full_dataset('gs://oai-challenge-dataset/data/tfrecords',
                                1024,
                                True,
                                5000)
+<<<<<<< HEAD
     """
 
     get_num_examples('gs://oai-challenge-dataset/data/tfrecords')
+=======
+>>>>>>> c957afad119fed2c9b6516f78325a067fce6bad7
+>>>>>>> 4853df860fab629733ac6d0d77f93edb60e807b1
