@@ -1,9 +1,11 @@
 import tensorflow as tf
+from tensorflow.python.framework.tensor_conversion_registry import get
 import tensorflow_io as tfio
 
 import time
 import datetime
 import os
+import numpy as np
 from functools import partial
 
 from sss.augmentation.dual_transform import get_preprocess_fn
@@ -55,6 +57,26 @@ def parse_fn(example_proto,
     image = tf.concat([image1, image2], -1)
     return image
 
+def get_num_examples(tfrecords_dir):
+
+    file_list = tf.io.matching_files(os.path.join(tfrecords_dir, '*-*'))
+
+    for file in file_list:
+
+        print(file)
+        dataset = tf.data.TFRecordDataset(file)
+        dataset = dataset.map(
+            partial(
+                parse_fn,
+                is_training=True,
+                normalize=True),
+            num_parallel_calls=AUTOTUNE)
+        
+        dataset = dataset.batch(1, drop_remainder=True).prefetch(AUTOTUNE)
+
+        cnt = dataset.reduce(np.int64(0), lambda x, _: x + 1)
+        print(cnt)
+
 
 def read_tfrecord(tfrecords_dir,
                   is_training,
@@ -65,6 +87,8 @@ def read_tfrecord(tfrecords_dir,
     
     file_list = tf.io.matching_files(os.path.join(tfrecords_dir, '*-*'))
     shards = tf.data.Dataset.from_tensor_slices(file_list)
+
+    get_num_examples(file_list)
 
     if is_training:
         shards = shards.shuffle(tf.cast(tf.shape(file_list)[0], tf.int64))
@@ -161,7 +185,11 @@ def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
 if __name__ == '__main__':
 
     # convert_dicom_to_tfrecords("dicom_files.txt", "00m", "01-of-09.tfrecords")
+    """
     ds = load_oai_full_dataset('gs://oai-challenge-dataset/data/tfrecords',
                                1024,
                                True,
                                5000)
+    """
+
+    get_num_examples('gs://oai-challenge-dataset/data/tfrecords')
