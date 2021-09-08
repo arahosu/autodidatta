@@ -13,12 +13,14 @@ def projection_head(hidden_dim=2048,
 
     for _ in range(num_layers):
         model.add(tfkl.Dense(hidden_dim, use_bias=False))
-        model.add(tfkl.BatchNormalization())
+        model.add(tfkl.BatchNormalization(
+            axis=-1, momentum=0.9, epsilon=1.001e-5))
         model.add(tfkl.ReLU())
 
     model.add(tfkl.Dense(output_dim, use_bias=True))
     if batch_norm_output:
-        model.add(tfkl.BatchNormalization())
+        model.add(tfkl.BatchNormalization(
+            axis=-1, momentum=0.9, epsilon=1.001e-5))
 
     return model
 
@@ -31,7 +33,8 @@ def predictor_head(hidden_dim=2048,
 
     for _ in range(num_layers):
         model.add(tfkl.Dense(hidden_dim, use_bias=False))
-        model.add(tfkl.BatchNormalization())
+        model.add(tfkl.BatchNormalization(
+            axis=-1, momentum=0.9, epsilon=1.001e-5))
         model.add(tfkl.ReLU())
 
     model.add(tfkl.Dense(output_dim, use_bias=True))

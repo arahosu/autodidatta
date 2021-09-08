@@ -13,7 +13,6 @@ from tensorflow.keras.callbacks import CSVLogger
 from autodidatta.datasets.cifar10 import load_input_fn
 from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
 from autodidatta.models.networks.mlp import projection_head, predictor_head
-from autodidatta.utils.loss import nt_xent_loss
 from autodidatta.utils.accelerator import setup_accelerator
 
 
@@ -58,7 +57,7 @@ flags.DEFINE_bool(
     True,
     'set whether to enable online finetuning (True by default)')
 flags.DEFINE_float(
-    'ft_learning_rate', 3e-03, 'set learning rate for finetuning optimizer')
+    'ft_learning_rate', 2e-04, 'set learning rate for finetuning optimizer')
 
 # Model specification args
 flags.DEFINE_enum(
@@ -319,7 +318,7 @@ def main(argv):
                 metrics=metrics)
         else:
             model.compile(optimizer=optimizer,
-                          loss_fn=nt_xent_loss)
+                          loss_fn=tf.keras.losses.cosine_similarity)
 
     # Define checkpoints
     time = datetime.now().strftime("%Y%m%d-%H%M%S")

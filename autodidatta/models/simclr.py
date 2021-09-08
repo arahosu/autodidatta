@@ -13,7 +13,8 @@ from tensorflow.keras.callbacks import CSVLogger
 from autodidatta.datasets.cifar10 import load_input_fn
 from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
 from autodidatta.models.networks.mlp import projection_head
-from autodidatta.utils.loss import nt_xent_loss
+from autodidatta.utils.optimizers import WarmUpAndCosineDecay
+from autodidatta.utils.loss import nt_xent_loss, nt_xent_loss_v2
 from autodidatta.utils.accelerator import setup_accelerator
 
 
@@ -33,6 +34,9 @@ flags.DEFINE_float(
     'loss_temperature', 0.5, 'set temperature for loss function')
 flags.DEFINE_integer('batch_size', 512, 'set batch size for pre-training.')
 flags.DEFINE_float('learning_rate', 1e-03, 'set learning rate for optimizer.')
+flags.DEFINE_integer(
+    'warmup_epochs', 10,
+    'number of warmup epochs for learning rate scheduler')
 flags.DEFINE_integer(
     'hidden_dim', 2048,
     'set number of units in the hidden \
@@ -71,7 +75,7 @@ flags.DEFINE_bool(
     'save_weights', False,
     'Whether to save weights. If True, weights are saved in logdir')
 flags.DEFINE_bool(
-    'save_history', False,
+    'save_history', True,
     'Whether to save the training history.'
 )
 flags.DEFINE_string(
@@ -161,7 +165,11 @@ class SimCLR(tf.keras.Model):
         zi = tf.math.l2_normalize(zi, axis=-1)
         zj = tf.math.l2_normalize(zj, axis=-1)
 
-        loss = self.loss_fn(zi, zj, self.loss_temperature)
+        # loss = self.loss_fn(zi, zj, self.loss_temperature)
+        loss = self.loss_fn(
+            hidden1=zi, hidden2=zj,
+            temperature=self.loss_temperature,
+            strategy=self.distribute_strategy)
 
         return loss
 
@@ -296,22 +304,42 @@ def main(argv):
         elif FLAGS.optimizer == 'adam':
             optimizer = Adam(learning_rate=FLAGS.learning_rate)
         elif FLAGS.optimizer == 'sgd':
-            optimizer = SGD(learning_rate=FLAGS.learning_rate)
+            lr_schedule = WarmUpAndCosineDecay(
+                FLAGS.learning_rate, num_train_examples,
+                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+            optimizer = SGD(
+                learning_rate=lr_schedule, momentum=0.9, nesterov=True)
         elif FLAGS.optimizer == 'adamw':
             optimizer = AdamW(
                 weight_decay=1e-06, learning_rate=FLAGS.learning_rate)
 
         if classifier is not None:
+            if FLAGS.optimizer == 'lamb':
+                ft_optimizer = LAMB(
+                    learning_rate=FLAGS.ft_learning_rate,
+                    weight_decay_rate=1e-04,
+                    exclude_from_weight_decay=['bias', 'BatchNormalization'])
+            elif FLAGS.optimizer == 'adam':
+                ft_optimizer = Adam(learning_rate=FLAGS.ft_learning_rate)
+            elif FLAGS.optimizer == 'sgd':
+                lr_schedule = WarmUpAndCosineDecay(
+                    FLAGS.ft_learning_rate, num_train_examples,
+                    FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+                ft_optimizer = SGD(
+                    learning_rate=lr_schedule, momentum=0.9, nesterov=True)
+            elif FLAGS.optimizer == 'adamw':
+                ft_optimizer = AdamW(
+                    weight_decay=1e-06, learning_rate=FLAGS.ft_learning_rate)
+
             model.compile(
                 optimizer=optimizer,
-                loss_fn=nt_xent_loss,
-                ft_optimizer=tf.keras.optimizers.Adam(
-                    learning_rate=FLAGS.ft_learning_rate),
+                loss_fn=nt_xent_loss_v2,
+                ft_optimizer=ft_optimizer,
                 loss=loss,
                 metrics=metrics)
         else:
             model.compile(optimizer=optimizer,
-                          loss_fn=nt_xent_loss)
+                          loss_fn=nt_xent_loss_v2)
 
     # Define checkpoints
     time = datetime.now().strftime("%Y%m%d-%H%M%S")
