@@ -1,6 +1,7 @@
 from absl import app
 from absl import flags
 from datetime import datetime
+import math
 import os
 
 import tensorflow as tf
@@ -15,7 +16,6 @@ from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
 from autodidatta.models.networks.mlp import projection_head, predictor_head
 from autodidatta.utils.accelerator import setup_accelerator
 
-
 # Dataset
 flags.DEFINE_enum(
     'dataset', 'cifar10',
@@ -28,10 +28,12 @@ flags.DEFINE_integer(
 flags.DEFINE_enum(
     'optimizer', 'adam', ['lamb', 'adam', 'sgd', 'adamw'],
     'optimizer for pre-training')
+flags.DEFINE_float(
+    'init_tau', 0.99, 'initial tau parameter for target network update')
 flags.DEFINE_integer('batch_size', 512, 'set batch size for pre-training.')
 flags.DEFINE_float('learning_rate', 1e-03, 'set learning rate for optimizer.')
 flags.DEFINE_integer(
-    'hidden_dim', 2048,
+    'hidden_dim', 4096,
     'set number of units in the hidden \
      layers of the projection/predictor head')
 flags.DEFINE_integer(
@@ -91,55 +93,77 @@ flags.DEFINE_bool('use_bfloat16', True, 'set whether to use mixed precision')
 FLAGS = flags.FLAGS
 
 
-class SimSiam(tf.keras.Model):
+class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
+
+    def __init__(self, init_tau=0.99):
+        super(BYOLMAWeightUpdate, self).__init__()
+
+        self.init_tau = init_tau
+        self.current_tau = init_tau
+        self.global_step = 0
+
+    def on_train_batch_end(self, batch, logs=None):
+        self.global_step += 1
+        self.update_weights()
+        self.current_tau = self.update_tau()
+
+    def update_tau(self):
+        return 1 - (1 - self.init_tau) * \
+            (math.cos(math.pi * self.global_step) + 1) / 2
+
+    @tf.function
+    def update_weights(self):
+        for online_layer, target_layer in zip(
+                self.model.online_network.layers,
+                self.model.target_network.layers):
+            if all(hasattr(target_layer, attr) for attr in ["kernel", "bias"]):
+                target_layer.kernel.assign(self.current_tau *
+                                           target_layer.kernel
+                                           + (1 - self.current_tau) *
+                                           online_layer.kernel)
+                target_layer.bias.assign(self.current_tau * target_layer.bias
+                                         + (1 - self.current_tau) *
+                                         online_layer.bias)
+
+
+class BYOL(tf.keras.Model):
 
     def __init__(self,
-                 backbone,
-                 projection,
-                 predictor,
+                 online_network,
+                 target_network,
                  classifier=None):
 
-        super(SimSiam, self).__init__()
+        super(BYOL, self).__init__()
 
-        self.backbone = backbone
-        self.projection = projection
-        self.predictor = predictor
+        self.online_network = online_network
+        self.target_network = target_network
         self.classifier = classifier
 
     def build(self, input_shape):
 
-        self.backbone.build(input_shape)
-        self.projection.build(self.backbone.compute_output_shape(input_shape))
-        self.predictor.build(
-            self.projection.compute_output_shape(
-                self.backbone.compute_output_shape(input_shape)))
+        self.online_network.build(input_shape)
 
         if self.classifier is not None:
             self.classifier.build(
-                self.backbone.compute_output_shape(input_shape))
+                self.online_network.compute_output_shape(input_shape)[0])
+        self.target_network.build(input_shape)
 
         self.built = True
 
     def call(self, x, training=False):
 
-        result = self.backbone(x, training=training)
+        x, _, _ = self.online_network(x, training=training)
 
-        return result
+        return x
 
     def compile(self, loss_fn, ft_optimizer=None, **kwargs):
-        super(SimSiam, self).compile(**kwargs)
+        super(BYOL, self).compile(**kwargs)
         self.loss_fn = loss_fn
         if self.classifier is not None:
             assert ft_optimizer is not None, \
                 'ft_optimizer should not be None if self.classifier is not \
                     None'
             self.ft_optimizer = ft_optimizer
-
-    def compute_output_shape(self, input_shape):
-
-        current_shape = self.backbone.compute_output_shape(input_shape)
-
-        return current_shape
 
     def shared_step(self, data, training):
 
@@ -149,17 +173,13 @@ class SimSiam(tf.keras.Model):
         xi = x[..., :num_channels]
         xj = x[..., num_channels:]
 
-        feat_i = self.backbone(xi, training=training)
-        feat_j = self.backbone(xj, training=training)
+        _, _, zi = self.online_network(xi, training=training)
+        _, _, zj = self.online_network(xj, training=training)
+        _, pi = self.target_network(xi, training=training)
+        _, pj = self.target_network(xj, training=training)
 
-        zi = self.projection(feat_i, training=training)
-        zj = self.projection(feat_j, training=training)
-
-        pi = self.predictor(zi, training=training)
-        pj = self.predictor(zj, training=training)
-
-        loss = self.loss_fn(pi, tf.stop_gradient(zj)) / 2
-        loss += self.loss_fn(pj, tf.stop_gradient(zi)) / 2
+        loss = self.loss_fn(pi, zj) / 2
+        loss += self.loss_fn(pj, zi) / 2
 
         return loss
 
@@ -186,9 +206,7 @@ class SimSiam(tf.keras.Model):
 
         with tf.GradientTape() as tape:
             loss = self.shared_step(data, training=True)
-        trainable_variables = self.backbone.trainable_variables + \
-            self.projection.trainable_variables + \
-            self.predictor.trainable_variables
+        trainable_variables = self.online_network.trainable_variables
         grads = tape.gradient(loss, trainable_variables)
         self.optimizer.apply_gradients(zip(grads, trainable_variables))
 
@@ -212,7 +230,7 @@ class SimSiam(tf.keras.Model):
         loss = self.shared_step(data, training=False)
 
         if self.classifier is not None:
-            features = self.backbone(view, training=False)
+            features = self(view, training=False)
             y_pred = self.classifier(features, training=False)
             _ = self.compiled_loss(
                 y, y_pred, regularization_losses=self.losses)
@@ -221,6 +239,31 @@ class SimSiam(tf.keras.Model):
             return {'similarity_loss': loss, **metric_results}
         else:
             return {'similarity_loss': loss}
+
+
+def build_online_network(backbone, hidden_dim, output_dim):
+
+    x = backbone.output
+    y = projection_head(
+        hidden_dim=hidden_dim,
+        output_dim=output_dim,
+        batch_norm_output=True)(x)
+    z = predictor_head(hidden_dim=hidden_dim, output_dim=output_dim)(y)
+
+    return tf.keras.Model(
+        inputs=backbone.input, outputs=[x, y, z], name='online_network')
+
+
+def build_target_network(backbone, hidden_dim, output_dim):
+
+    x = backbone.output
+    y = projection_head(
+        hidden_dim=hidden_dim,
+        output_dim=output_dim,
+        batch_norm_output=True)(x)
+
+    return tf.keras.Model(
+        inputs=backbone.input, outputs=[x, y], name='target_network')
 
 
 def main(argv):
@@ -280,17 +323,17 @@ def main(argv):
         else:
             classifier = None
 
-        model = SimSiam(backbone=backbone,
-                        projection=projection_head(
-                            hidden_dim=FLAGS.hidden_dim,
-                            output_dim=FLAGS.output_dim,
-                            num_layers=FLAGS.num_head_layers,
-                            batch_norm_output=True),
-                        predictor=predictor_head(
-                            hidden_dim=FLAGS.hidden_dim,
-                            output_dim=FLAGS.output_dim,
-                            num_layers=FLAGS.num_head_layers),
-                        classifier=classifier)
+        online_network = build_online_network(
+            backbone, FLAGS.hidden_dim, FLAGS.output_dim)
+        backbone_2 = tf.keras.models.clone_model(backbone)
+        target_network = build_target_network(
+            backbone_2, FLAGS.hidden_dim, FLAGS.output_dim)
+
+        model = BYOL(
+            online_network=online_network,
+            target_network=target_network,
+            classifier=classifier
+        )
 
         # select optimizer
         if FLAGS.optimizer == 'lamb':
@@ -320,7 +363,10 @@ def main(argv):
 
     # Define checkpoints
     time = datetime.now().strftime("%Y%m%d-%H%M%S")
-    cb = None
+    # Moving Average Weight Update Callback
+    movingavg_cb = BYOLMAWeightUpdate(init_tau=FLAGS.init_tau)
+    cb = [movingavg_cb]
+    # cb = []
 
     if FLAGS.save_weights:
         logdir = os.path.join(FLAGS.logdir, time)
@@ -330,9 +376,10 @@ def main(argv):
         os.mkdir(histdir)
 
         # Create a callback for saving the training results into a csv file
-        histfile = 'simsiam_results.csv'
+        histfile = 'byol_results.csv'
         csv_logger = CSVLogger(os.path.join(histdir, histfile))
-        cb = [csv_logger]
+
+        cb.append(csv_logger)
 
         # Save flag params in a flag file in the same subdirectory
         flagfile = os.path.join(histdir, 'train_flags.cfg')
@@ -348,7 +395,7 @@ def main(argv):
         callbacks=cb)
 
     if FLAGS.save_weights:
-        weights_name = 'simsiam_weights.hdf5'
+        weights_name = 'byol_weights.hdf5'
         model.save_weights(os.path.join(logdir, weights_name))
 
 
