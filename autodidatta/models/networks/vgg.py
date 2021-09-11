@@ -159,3 +159,22 @@ def VGG_UNet_Decoder(input_shapes,
     model = tf.keras.Model(
         [bridge_0, bridge_1, bridge_2, bridge_3, bridge_4], x4)
     return model
+
+
+def build_unet(encoder, decoder, num_classes):
+
+    encoder_outputs = encoder.output
+    decoder_output = decoder(encoder_outputs)
+
+    if num_classes == 1:
+        output_activation = 'sigmoid'
+    else:
+        output_activation = 'softmax'
+
+    seg_output = tfkl.Conv2D(num_classes,
+                             1,
+                             padding='same',
+                             activation=output_activation)(decoder_output)
+
+    return tf.keras.Model(
+        inputs=encoder.input, outputs=seg_output, name='unet')

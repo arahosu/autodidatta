@@ -11,16 +11,21 @@ import tensorflow_datasets as tfds
 from tensorflow.keras.callbacks import CSVLogger
 
 from autodidatta.datasets.cifar10 import load_input_fn
+from autodidatta.datasets.oai import load_dataset
 from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
 from autodidatta.models.networks.mlp import projection_head, predictor_head
+from autodidatta.models.networks.vgg import VGG_UNet_Encoder
 from autodidatta.utils.accelerator import setup_accelerator
 
 
 # Dataset
 flags.DEFINE_enum(
     'dataset', 'cifar10',
-    ['cifar10', 'stl10', 'imagenet'],
-    'cifar10 (default), stl10, imagenet')
+    ['cifar10', 'stl10', 'oai', 'imagenet'],
+    'cifar10 (default), oai, stl10, imagenet')
+flags.DEFINE_string(
+    'dataset_dir', 'gs://oai-challenge-dataset/data/tfrecords',
+    'directory for where the dataset is stored')
 
 # Training
 flags.DEFINE_integer(
@@ -60,12 +65,12 @@ flags.DEFINE_float(
 # Model specification args
 flags.DEFINE_enum(
     'backbone', 'resnet18',
-    ['resnet50', 'resnet34', 'resnet18'],
-    'resnet50 (default), resnet18, resnet34')
+    ['resnet50', 'resnet34', 'resnet18', 'vgg_unet'],
+    'resnet50 (default), resnet18, resnet34, vgg_unet')
 
 # logging specification
 flags.DEFINE_bool(
-    'save_weights', False,
+    'save_weights', True,
     'Whether to save weights. If True, weights are saved in logdir')
 flags.DEFINE_bool(
     'save_history', True,
@@ -142,8 +147,10 @@ class SimSiam(tf.keras.Model):
         return current_shape
 
     def shared_step(self, data, training):
-
-        x, _ = data
+        if isinstance(data, tuple):
+            x, _ = data
+        else:
+            x = data
         num_channels = int(x.shape[-1] // 2)
 
         xi = x[..., :num_channels]
@@ -151,6 +158,10 @@ class SimSiam(tf.keras.Model):
 
         feat_i = self.backbone(xi, training=training)
         feat_j = self.backbone(xj, training=training)
+
+        if isinstance(feat_i, list):
+            feat_i = feat_i[-1]
+            feat_j = feat_j[-1]
 
         zi = self.projection(feat_i, training=training)
         zj = self.projection(feat_j, training=training)
@@ -174,6 +185,8 @@ class SimSiam(tf.keras.Model):
 
         with tf.GradientTape() as tape:
             features = self(view, training=True)
+            if isinstance(features, list):
+                features = features[-1]
             y_pred = self.classifier(features, training=True)
             loss = self.compiled_loss(
                 y, y_pred, regularization_losses=self.losses)
@@ -213,6 +226,8 @@ class SimSiam(tf.keras.Model):
 
         if self.classifier is not None:
             features = self.backbone(view, training=False)
+            if isinstance(features, list):
+                features = features[-1]
             y_pred = self.classifier(features, training=False)
             _ = self.compiled_loss(
                 y, y_pred, regularization_losses=self.losses)
@@ -221,6 +236,20 @@ class SimSiam(tf.keras.Model):
             return {'similarity_loss': loss, **metric_results}
         else:
             return {'similarity_loss': loss}
+
+    def save_weights(self,
+                     filepath,
+                     overwrite=True,
+                     save_format=None,
+                     options=None,
+                     save_backbone_only=False):
+        if save_backbone_only:
+            weights = self.backbone.save_weights(
+                filepath, overwrite, save_format, options)
+        else:
+            weights = super(SimSiam, self).save_weights(
+                filepath, overwrite, save_format, options)
+        return weights
 
 
 def main(argv):
@@ -243,11 +272,34 @@ def main(argv):
             pre_train=True)
         ds_shape = (32, 32, 3)
 
-    ds_info = tfds.builder(FLAGS.dataset).info
-    num_train_examples = ds_info.splits['train'].num_examples
-    num_val_examples = ds_info.splits['test'].num_examples
-    steps_per_epoch = num_train_examples // FLAGS.batch_size
-    validation_steps = num_val_examples // FLAGS.batch_size
+        ds_info = tfds.builder(FLAGS.dataset).info
+        num_train_examples = ds_info.splits['train'].num_examples
+        num_val_examples = ds_info.splits['test'].num_examples
+        steps_per_epoch = num_train_examples // FLAGS.batch_size
+        validation_steps = num_val_examples // FLAGS.batch_size
+
+    elif FLAGS.dataset == 'oai':
+        train_ds = load_dataset(
+            FLAGS.dataset_dir,
+            FLAGS.batch_size,
+            288,
+            50000,
+            'pretrain',
+            1.0,
+            False,
+            False,
+            True)
+
+        validation_ds = None
+
+        ds_shape = (288, 288, 1)
+        num_train_examples = 7786205
+        num_val_examples = None
+        steps_per_epoch = num_train_examples // FLAGS.batch_size
+        validation_steps = None
+
+        assert FLAGS.online_ft is False, 'online finetuning is currently not supported \
+            with the oai dataset'
 
     with strategy.scope():
         # load model
@@ -257,6 +309,8 @@ def main(argv):
             backbone = ResNet34(input_shape=ds_shape)
         elif FLAGS.backbone == 'resnet18':
             backbone = ResNet18(input_shape=ds_shape)
+        elif FLAGS.backbone == 'vgg_unet':
+            backbone = VGG_UNet_Encoder(input_shape=ds_shape)
 
         # If online finetuning is enabled
         if FLAGS.online_ft:
@@ -349,7 +403,8 @@ def main(argv):
 
     if FLAGS.save_weights:
         weights_name = 'simsiam_weights.hdf5'
-        model.save_weights(os.path.join(logdir, weights_name))
+        model.save_weights(os.path.join(logdir, weights_name),
+                           save_backbone_only=True)
 
 
 if __name__ == '__main__':

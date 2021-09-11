@@ -58,8 +58,7 @@ def aug_fn(image, image_size, is_training, pre_train):
     transforms = A.Augment([
             A.layers.RandomResizedCrop(image_size, image_size),
             A.layers.ColorJitter(0.4, 0.4, 0.4, 0.1, p=color_jitter_prob),
-            A.layers.ToGray(p=grayscale_prob),
-            A.layers.HorizontalFlip(p=0.5)
+            A.layers.ToGray(p=grayscale_prob)
             ])
 
     # apply augmentation

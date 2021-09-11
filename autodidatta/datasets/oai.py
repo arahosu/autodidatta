@@ -66,16 +66,33 @@ def parse_fn_pretrain(example_proto,
     if normalize:
         image = min_max_normalize(image)
 
-    # patient_id = image_features['patient_id']
+    patient_id = image_features['patient_id']
 
-    preprocess_fn = partial(
-        aug_fn, image_size=image_size, is_training=is_training, pre_train=True)
+    if patient_id_exclusion_list is not None:
+        if patient_id not in patient_id_exclusion_list:
+            preprocess_fn = partial(
+                aug_fn, image_size=image_size,
+                is_training=is_training, pre_train=True)
 
-    image_1 = preprocess_fn(image)
-    image_2 = preprocess_fn(image)
-    image = tf.concat([image_1, image_2], -1)
+            image_1 = preprocess_fn(image)
+            image_1 = tf.reshape(image_1, [image_size, image_size, 1])
+            image_2 = preprocess_fn(image)
+            image_2 = tf.reshape(image_2, [image_size, image_size, 1])
+            image = tf.concat([image_1, image_2], -1)
 
-    return image
+            return image
+    else:
+        preprocess_fn = partial(
+            aug_fn, image_size=image_size,
+            is_training=is_training, pre_train=True)
+
+        image_1 = preprocess_fn(image)
+        image_1 = tf.reshape(image_1, [image_size, image_size, 1])
+        image_2 = preprocess_fn(image)
+        image_2 = tf.reshape(image_2, [image_size, image_size, 1])
+        image = tf.concat([image_1, image_2], -1)
+
+        return image
 
 
 def parse_fn_finetune(example_proto,
@@ -115,6 +132,7 @@ def parse_fn_finetune(example_proto,
 
     seg = tf.cast(seg, tf.float32)
     seg = tf.clip_by_value(seg, 0., 1.)
+    num_classes = seg.shape[-1]
 
     preprocess_fn = partial(
         aug_fn,
@@ -122,6 +140,8 @@ def parse_fn_finetune(example_proto,
 
     image, seg = preprocess_fn(
             image=image, mask=seg)
+    image = tf.reshape(image, [image_size, image_size, 1])
+    seg = tf.reshape(seg, [image_size, image_size, num_classes])
     return (image, seg)
 
 
@@ -219,7 +239,8 @@ def load_dataset(dataset_dir,
                  fraction_data,
                  multi_class,
                  add_background,
-                 normalize):
+                 normalize,
+                 patient_id_exclusion_list=None):
 
     if training_mode == 'finetune':
         train_dir, val_dir = 'train/', 'valid/'
@@ -256,6 +277,7 @@ def load_dataset(dataset_dir,
             image_size=image_size,
             buffer_size=buffer_size,
             is_training=True,
-            normalize=normalize)
+            normalize=normalize,
+            patient_id_exclusion_list=patient_id_exclusion_list)
 
         return ds

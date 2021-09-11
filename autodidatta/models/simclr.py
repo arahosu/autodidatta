@@ -21,8 +21,8 @@ from autodidatta.utils.accelerator import setup_accelerator
 # Dataset
 flags.DEFINE_enum(
     'dataset', 'cifar10',
-    ['cifar10', 'stl10', 'imagenet'],
-    'cifar10 (default), stl10, imagenet')
+    ['cifar10', 'oai', 'stl10', 'imagenet'],
+    'cifar10 (default), oai, stl10, imagenet')
 
 # Training
 flags.DEFINE_integer(
@@ -158,6 +158,10 @@ class SimCLR(tf.keras.Model):
         zi = self.backbone(xi, training=training)
         zj = self.backbone(xj, training=training)
 
+        if isinstance(zi, list):
+            zi = zi[-1]
+            zj = zj[-1]
+
         if self.projection is not None:
             zi = self.projection(zi, training=training)
             zj = self.projection(zj, training=training)
@@ -199,6 +203,8 @@ class SimCLR(tf.keras.Model):
 
         with tf.GradientTape() as tape:
             features = self.backbone(view, training=True)
+            if isinstance(features, list):
+                features = features[-1]
             y_pred = self.classifier(features, training=True)
             loss = self.compiled_loss(
                 y, y_pred, regularization_losses=self.losses)
@@ -218,6 +224,8 @@ class SimCLR(tf.keras.Model):
                 num_classes = int(y.shape[-1] // 2)
                 y = y[..., :num_classes]
             features = self.backbone(view, training=False)
+            if isinstance(features, list):
+                features = features[-1]
             y_pred = self.classifier(features, training=False)
             _ = self.compiled_loss(
                 y, y_pred, regularization_losses=self.losses)
@@ -226,6 +234,20 @@ class SimCLR(tf.keras.Model):
             return {'similarity_loss': sim_loss, **metric_results}
         else:
             return {'loss': sim_loss}
+
+    def save_weights(self,
+                     filepath,
+                     overwrite=True,
+                     save_format=None,
+                     options=None,
+                     save_backbone_only=False):
+        if save_backbone_only:
+            weights = self.backbone.save_weights(
+                filepath, overwrite, save_format, options)
+        else:
+            weights = super(SimCLR, self).save_weights(
+                filepath, overwrite, save_format, options)
+        return weights
 
 
 def main(argv):
