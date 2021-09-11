@@ -32,18 +32,18 @@ def _int64_feature(value):
 def parse_fn(example_proto,
              is_training,
              normalize):
-        
+
     features = {
                 'image_raw': tf.io.FixedLenFeature([], tf.string),
                 'patient_id': tf.io.FixedLenFeature([], tf.int64)
                 }
-    
+
     # Parse the input tf.Example proto using the dictionary above.
     image_features = tf.io.parse_single_example(example_proto, features)
     image_raw = tf.io.decode_raw(image_features['image_raw'], tf.int16)
     image = tf.cast(tf.reshape(image_raw, [384, 384, 1]), tf.float32)
     patient_id = image_features['patient_id']
-    
+
     if normalize:
         image = min_max_standardize(image)
 
@@ -62,7 +62,7 @@ def read_tfrecord(tfrecords_dir,
                   normalize,
                   buffer_size,
                   drop_remainder=True):
-    
+
     file_list = tf.io.matching_files(os.path.join(tfrecords_dir, '*-*'))
     shards = tf.data.Dataset.from_tensor_slices(file_list)
 
@@ -96,13 +96,13 @@ def load_oai_full_dataset(tfrecords_dir,
                           batch_size,
                           normalize,
                           buffer_size):
-    
+
     train_ds = read_tfrecord(tfrecords_dir,
                              True,
                              batch_size,
                              normalize,
                              buffer_size)
-    
+
     return train_ds
 
 
@@ -129,12 +129,13 @@ def count_dicom_files(text_file, keyword):
         image = tfio.image.decode_dicom_image(image_bytes, dtype=tf.uint16)
 
         if tf.rank(image) == 4:
-            counter += 1 
-        
+            counter += 1
+
         if idx % 100 == 0:
             print('{} out of {} images processed'.format(idx+1, num_files))
-    
+
     return counter
+
 
 def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
     # filter the text file according to keyword
@@ -157,6 +158,7 @@ def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
             image = tfio.image.decode_dicom_image(image_bytes, dtype=tf.uint16)
             image = image.numpy()
             image = image[0, ...]
+            print(image.shape)
 
             if image.ndim == 4:
 
@@ -190,7 +192,9 @@ def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
 
 if __name__ == '__main__':
 
-    # convert_dicom_to_tfrecords("dicom_files.txt", "00m", "01-of-09.tfrecords")
+    convert_dicom_to_tfrecords("dicom_files.txt",
+                               "00m/0.C.2",
+                               "01-of-09.tfrecords")
     # ds = load_oai_full_dataset('gs://oai-challenge-dataset/data/tfrecords',
     #                            1024,
     #                            True,
