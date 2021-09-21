@@ -283,7 +283,7 @@ def main(argv):
             FLAGS.dataset_dir,
             FLAGS.batch_size,
             288,
-            50000,
+            1,
             'pretrain',
             1.0,
             False,
@@ -293,7 +293,8 @@ def main(argv):
         validation_ds = None
 
         ds_shape = (288, 288, 1)
-        num_train_examples = 7786045
+        # num_train_examples = 7786045
+        num_train_examples = 1204480
         num_val_examples = None
         steps_per_epoch = num_train_examples // FLAGS.batch_size
         validation_steps = None
