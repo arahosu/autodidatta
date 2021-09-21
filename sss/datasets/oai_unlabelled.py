@@ -4,6 +4,7 @@ import tensorflow_io as tfio
 import time
 import datetime
 import os
+import numpy as np
 from functools import partial
 
 from sss.augmentation.dual_transform import get_preprocess_fn
@@ -56,6 +57,27 @@ def parse_fn(example_proto,
     return image
 
 
+def get_num_examples(tfrecords_dir):
+
+    file_list = tf.io.matching_files(os.path.join(tfrecords_dir, '*-*'))
+
+    for file in file_list:
+
+        print(file)
+        dataset = tf.data.TFRecordDataset(file)
+        dataset = dataset.map(
+            partial(
+                parse_fn,
+                is_training=True,
+                normalize=True),
+            num_parallel_calls=AUTOTUNE)
+
+        dataset = dataset.batch(1, drop_remainder=True).prefetch(AUTOTUNE)
+
+        cnt = dataset.reduce(np.int64(0), lambda x, _: x + 1)
+        print(cnt)
+
+
 def read_tfrecord(tfrecords_dir,
                   is_training,
                   batch_size,
@@ -65,6 +87,8 @@ def read_tfrecord(tfrecords_dir,
 
     file_list = tf.io.matching_files(os.path.join(tfrecords_dir, '*-*'))
     shards = tf.data.Dataset.from_tensor_slices(file_list)
+
+    get_num_examples(file_list)
 
     if is_training:
         shards = shards.shuffle(tf.cast(tf.shape(file_list)[0], tf.int64))
@@ -106,7 +130,7 @@ def load_oai_full_dataset(tfrecords_dir,
     return train_ds
 
 
-def count_dicom_files(text_file, keyword):
+def count_dicom_files(text_file, keyword, count_valid_examples=False):
 
     # filter the text file according to keyword
     text_file = open(text_file, "r")
@@ -122,19 +146,25 @@ def count_dicom_files(text_file, keyword):
     num_files = len(filelist)
     print('Number of DICOM files detected: {}'.format(num_files))
 
-    counter = 0
+    if count_valid_examples:
+        counter = 0
 
-    for idx, f in enumerate(filelist):
-        image_bytes = tf.io.read_file(f)
-        image = tfio.image.decode_dicom_image(image_bytes, dtype=tf.uint16)
+        for idx, f in enumerate(filelist):
+            image_bytes = tf.io.read_file(f)
+            image = tfio.image.decode_dicom_image(image_bytes, dtype=tf.uint16)
+            image = image.numpy()
+            if image.ndim == 4:
+                image = image = image[0, ...]
 
-        if tf.rank(image) == 4:
-            counter += 1
+            if image.ndim == 3 and image.shape == (384, 384, 1):
+                counter += 1
 
-        if idx % 100 == 0:
-            print('{} out of {} images processed'.format(idx+1, num_files))
+            if idx % 1000 == 0:
+                print('{} out of {} images processed'.format(idx+1, num_files))
 
-    return counter
+        return counter
+    else:
+        return num_files
 
 
 def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
@@ -191,11 +221,6 @@ def convert_dicom_to_tfrecords(text_file, keyword, dest_file):
 
 
 if __name__ == '__main__':
+    # convert_dicom_to_tfrecords("dicom_files.txt", "00m", "01-of-09.tfrecords")
+    count_dicom_files("dicom_files.txt", "00m", count_valid_examples=True)
 
-    convert_dicom_to_tfrecords("dicom_files.txt",
-                               "00m/0.C.2",
-                               "01-of-09.tfrecords")
-    # ds = load_oai_full_dataset('gs://oai-challenge-dataset/data/tfrecords',
-    #                            1024,
-    #                            True,
-    #                            5000)
