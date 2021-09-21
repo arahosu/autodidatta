@@ -75,8 +75,13 @@ def parse_fn_pretrain(example_proto,
                 is_training=is_training, pre_train=True)
 
             image_1 = preprocess_fn(image)
-            image_1 = tf.reshape(image_1, [image_size, image_size, 1])
             image_2 = preprocess_fn(image)
+            if not is_training:
+                image_1 = tf.image.resize_with_crop_or_pad(
+                    image_1, image_size, image_size)
+                image_2 = tf.image.resize_with_crop_or_pad(
+                    image_2, image_size, image_size)
+            image_1 = tf.reshape(image_1, [image_size, image_size, 1])
             image_2 = tf.reshape(image_2, [image_size, image_size, 1])
             image = tf.concat([image_1, image_2], -1)
 
@@ -87,8 +92,13 @@ def parse_fn_pretrain(example_proto,
             is_training=is_training, pre_train=True)
 
         image_1 = preprocess_fn(image)
-        image_1 = tf.reshape(image_1, [image_size, image_size, 1])
         image_2 = preprocess_fn(image)
+        if not is_training:
+            image_1 = tf.image.resize_with_crop_or_pad(
+                image_1, image_size, image_size)
+            image_2 = tf.image.resize_with_crop_or_pad(
+                image_2, image_size, image_size)
+        image_1 = tf.reshape(image_1, [image_size, image_size, 1])
         image_2 = tf.reshape(image_2, [image_size, image_size, 1])
         image = tf.concat([image_1, image_2], -1)
 

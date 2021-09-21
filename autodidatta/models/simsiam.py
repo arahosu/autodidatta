@@ -293,7 +293,7 @@ def main(argv):
         validation_ds = None
 
         ds_shape = (288, 288, 1)
-        num_train_examples = 7786205
+        num_train_examples = 7786045
         num_val_examples = None
         steps_per_epoch = num_train_examples // FLAGS.batch_size
         validation_steps = None

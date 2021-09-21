@@ -1,1 +1,1 @@
-python3 -m autodidatta.models.simsiam --dataset=oai --backbone=vgg_unet --dataset_dir=gs://oai-challenge-dataset/data/tfrecords/ --online_ft=False --train_epochs=100 --batch_size=1024
+python3 -m autodidatta.models.simsiam --dataset=oai --backbone=vgg_unet --dataset_dir=gs://oai-challenge-dataset/data/tfrecords/ --online_ft=False --train_epochs=100 --batch_size=1024 --save_history=False

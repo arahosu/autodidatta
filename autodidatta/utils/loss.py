@@ -123,25 +123,10 @@ def nt_xent_loss_v2(hidden1,
     return loss
 
 
-def cosine_similarity_v2(hidden1,
-                         hidden2,
-                         temperature=1.0,
-                         stop_gradient=True,
-                         strategy=None):
+def byol_loss(hidden1,
+              hidden2):
 
-    if strategy is not None:
-        hidden1_large = tpu_cross_replica_concat(hidden1, strategy)
-        hidden2_large = tpu_cross_replica_concat(hidden2, strategy)
-    else:
-        hidden1_large = hidden1
-        hidden2_large = hidden2
-
-    if stop_gradient:
-        return temperature * tf.keras.losses.cosine_similarity(
-            hidden1_large, tf.stop_gradient(hidden2_large))
-    else:
-        return temperature * tf.keras.losses.cosine_similarity(
-            hidden1_large, hidden2_large)
+    return 2 - 2*tf.keras.losses.cosine_similarity(hidden1, hidden2)
 
 
 def tversky_loss(y_true,

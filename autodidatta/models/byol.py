@@ -14,6 +14,7 @@ from tensorflow.keras.callbacks import CSVLogger
 from autodidatta.datasets.cifar10 import load_input_fn
 from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
 from autodidatta.models.networks.mlp import projection_head, predictor_head
+from autodidatta.utils.loss import byol_loss
 from autodidatta.utils.accelerator import setup_accelerator
 
 # Dataset
@@ -37,7 +38,7 @@ flags.DEFINE_integer(
     'set number of units in the hidden \
      layers of the projection/predictor head')
 flags.DEFINE_integer(
-    'output_dim', 512,
+    'output_dim', 4096,
     'set number of units in the output layer of the projection/predictor head')
 flags.DEFINE_integer(
     'num_head_layers', 1,
@@ -178,8 +179,8 @@ class BYOL(tf.keras.Model):
         _, pi = self.target_network(xi, training=training)
         _, pj = self.target_network(xj, training=training)
 
-        loss = self.loss_fn(pi, zj) / 2
-        loss += self.loss_fn(pj, zi) / 2
+        loss = self.loss_fn(tf.stop_gradient(pi), zj)
+        loss += self.loss_fn(tf.stop_gradient(pj), zi)
 
         return loss
 
@@ -352,14 +353,14 @@ def main(argv):
         if classifier is not None:
             model.compile(
                 optimizer=optimizer,
-                loss_fn=tf.keras.losses.cosine_similarity,
+                loss_fn=byol_loss,
                 ft_optimizer=tf.keras.optimizers.Adam(
                     learning_rate=FLAGS.ft_learning_rate),
                 loss=loss,
                 metrics=metrics)
         else:
             model.compile(optimizer=optimizer,
-                          loss_fn=tf.keras.losses.cosine_similarity)
+                          loss_fn=byol_loss)
 
     # Define checkpoints
     time = datetime.now().strftime("%Y%m%d-%H%M%S")
