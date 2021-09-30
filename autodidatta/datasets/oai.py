@@ -286,7 +286,7 @@ if __name__ == '__main__':
     train_ds = load_dataset(
             'gs://oai-challenge-dataset/data/tfrecords',
             1024,
-            384,
+            288,
             1,
             'pretrain',
             1.0,
@@ -294,5 +294,5 @@ if __name__ == '__main__':
             False,
             True)
 
-    for step, image in enumerate(train_ds):
+    for step, (image) in enumerate(train_ds):
         print(step)

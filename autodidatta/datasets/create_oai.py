@@ -113,4 +113,4 @@ def count_dicom_files(text_file, keyword, count_valid_examples=False):
 
 if __name__ == '__main__':
 
-    # convert_dicom_to_tfrecords("dicom_files.txt", "00m", "01-of-09.tfrecords")
+    convert_dicom_to_tfrecords("dicom_files.txt", "00m", "01-of-09.tfrecords")
