@@ -76,13 +76,7 @@ def parse_fn_pretrain(example_proto,
 
             image_1 = preprocess_fn(image)
             image_2 = preprocess_fn(image)
-            if not is_training:
-                image_1 = tf.image.resize_with_crop_or_pad(
-                    image_1, image_size, image_size)
-                image_2 = tf.image.resize_with_crop_or_pad(
-                    image_2, image_size, image_size)
-            image_1 = tf.reshape(image_1, [image_size, image_size, 1])
-            image_2 = tf.reshape(image_2, [image_size, image_size, 1])
+
             image = tf.concat([image_1, image_2], -1)
 
             return image
@@ -93,11 +87,6 @@ def parse_fn_pretrain(example_proto,
 
         image_1 = preprocess_fn(image)
         image_2 = preprocess_fn(image)
-        if not is_training:
-            image_1 = tf.image.resize_with_crop_or_pad(
-                image_1, image_size, image_size)
-            image_2 = tf.image.resize_with_crop_or_pad(
-                image_2, image_size, image_size)
         image_1 = tf.reshape(image_1, [image_size, image_size, 1])
         image_2 = tf.reshape(image_2, [image_size, image_size, 1])
         image = tf.concat([image_1, image_2], -1)
@@ -286,8 +275,24 @@ def load_dataset(dataset_dir,
             batch_size=batch_size,
             image_size=image_size,
             buffer_size=buffer_size,
-            is_training=True,
+            is_training=True,  # Remember to change this back to True
             normalize=normalize,
             patient_id_exclusion_list=patient_id_exclusion_list)
 
         return ds
+
+
+if __name__ == '__main__':
+    train_ds = load_dataset(
+            'gs://oai-challenge-dataset/data/tfrecords',
+            1024,
+            384,
+            1,
+            'pretrain',
+            1.0,
+            False,
+            False,
+            True)
+
+    for step, image in enumerate(train_ds):
+        print(step)
