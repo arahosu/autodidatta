@@ -1,4 +1,10 @@
 *.json
+*.hdf5
+*.csv
+*.cfg
+*.txt
+*.tfrecords
+*.ipynb
 
 # Python cache
 **/__pycache__
