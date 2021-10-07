@@ -11,21 +11,16 @@ import tensorflow_datasets as tfds
 from tensorflow.keras.callbacks import CSVLogger
 
 from autodidatta.datasets.cifar10 import load_input_fn
-from autodidatta.datasets.oai import load_dataset
 from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
 from autodidatta.models.networks.mlp import projection_head, predictor_head
-from autodidatta.models.networks.vgg import VGG_UNet_Encoder
 from autodidatta.utils.accelerator import setup_accelerator
 
 
 # Dataset
 flags.DEFINE_enum(
     'dataset', 'cifar10',
-    ['cifar10', 'stl10', 'oai', 'imagenet'],
-    'cifar10 (default), oai, stl10, imagenet')
-flags.DEFINE_string(
-    'dataset_dir', 'gs://oai-challenge-dataset/data/tfrecords',
-    'directory for where the dataset is stored')
+    ['cifar10', 'stl10', 'imagenet'],
+    'cifar10 (default), stl10, imagenet')
 
 # Training
 flags.DEFINE_integer(
@@ -278,29 +273,6 @@ def main(argv):
         steps_per_epoch = num_train_examples // FLAGS.batch_size
         validation_steps = num_val_examples // FLAGS.batch_size
 
-    elif FLAGS.dataset == 'oai':
-        train_ds = load_dataset(
-            FLAGS.dataset_dir,
-            FLAGS.batch_size,
-            288,
-            50000,
-            'pretrain',
-            1.0,
-            False,
-            False,
-            True)
-
-        validation_ds = None
-
-        ds_shape = (288, 288, 1)
-        num_train_examples = 7786045
-        num_val_examples = None
-        steps_per_epoch = num_train_examples // FLAGS.batch_size
-        validation_steps = None
-
-        assert FLAGS.online_ft is False, 'online finetuning is currently not supported \
-            with the oai dataset'
-
     with strategy.scope():
         # load model
         if FLAGS.backbone == 'resnet50':
@@ -309,8 +281,6 @@ def main(argv):
             backbone = ResNet34(input_shape=ds_shape)
         elif FLAGS.backbone == 'resnet18':
             backbone = ResNet18(input_shape=ds_shape)
-        elif FLAGS.backbone == 'vgg_unet':
-            backbone = VGG_UNet_Encoder(input_shape=ds_shape)
 
         # If online finetuning is enabled
         if FLAGS.online_ft:

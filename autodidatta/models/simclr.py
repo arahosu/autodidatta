@@ -21,8 +21,8 @@ from autodidatta.utils.accelerator import setup_accelerator
 # Dataset
 flags.DEFINE_enum(
     'dataset', 'cifar10',
-    ['cifar10', 'oai', 'stl10', 'imagenet'],
-    'cifar10 (default), oai, stl10, imagenet')
+    ['cifar10', 'stl10', 'imagenet'],
+    'cifar10 (default), stl10, imagenet')
 
 # Training
 flags.DEFINE_integer(

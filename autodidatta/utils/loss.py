@@ -29,7 +29,11 @@ def nt_xent_loss(out_i, out_j, temperature):
 
 
 def tpu_cross_replica_concat(tensor, strategy=None):
-    """Reduce a concatenation of the `tensor` across TPU cores.
+    """
+    Taken from Google Research's SimCLR repository:
+    https://github.com/google-research/simclr/blob/master/tf2/objective.py
+
+    Reduce a concatenation of the `tensor` across TPU cores.
     Args:
     tensor: tensor to concatenate.
     strategy: A `tf.distribute.Strategy`. If not set, CPU execution is assumed.
@@ -70,7 +74,11 @@ def nt_xent_loss_v2(hidden1,
                     temperature=0.5,
                     strategy=None):
 
-    """Compute loss for model.
+    """
+    Taken from Google Research's SimCLR repository:
+    https://github.com/google-research/simclr/blob/master/tf2/objective.py
+
+    Compute loss for model.
     Args:
     hidden: hidden vector (`Tensor`) of shape (bsz, dim).
     temperature: a `floating` number for temperature scaling.
@@ -127,36 +135,3 @@ def byol_loss(hidden1,
               hidden2):
 
     return 2 - 2*tf.keras.losses.cosine_similarity(hidden1, hidden2)
-
-
-def tversky_loss(y_true,
-                 y_pred,
-                 alpha=0.5,
-                 beta=0.5,
-                 smooth=1e-10):
-    """ Tversky loss function.
-    Parameters
-    ----------
-    y_true : tensor containing target mask.
-    y_pred : tensor containing predicted mask.
-    alpha : real value, weight of '0' class.
-    beta : real value, weight of '1' class.
-    smooth : small real value used for avoiding division by zero error.
-    Returns
-    -------
-    tensor
-        tensor containing tversky loss.
-    """
-
-    # y_true = y_true[..., 1:]
-    # y_pred = y_pred[..., 1:]
-
-    y_true = tf.reshape(y_true, [-1])
-    y_pred = tf.reshape(y_pred, [-1])
-    truepos = tf.math.reduce_sum(y_true * y_pred)
-    fp_and_fn = alpha * tf.math.reduce_sum(
-        y_pred * (1 - y_true)) + beta * tf.math.reduce_sum(
-        (1 - y_pred) * y_true)
-    answer = (truepos + smooth) / ((truepos + smooth) + fp_and_fn)
-
-    return tf.cast(1 - answer, tf.float32)

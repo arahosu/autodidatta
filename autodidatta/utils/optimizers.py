@@ -3,7 +3,10 @@ from math import sqrt
 
 
 class WarmUpAndCosineDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
-    """Applies a warmup schedule on a given learning rate decay schedule."""
+    """Applies a warmup schedule on a given learning rate decay schedule.
+    Taken from Google Research SimCLR repository:
+    https://github.com/google-research/simclr/blob/dec99a81a4ceccb0a5a893afecbc2ee18f1d76c3/tf2/model.py#L78
+    """
 
     def __init__(self,
                  base_learning_rate,
@@ -41,7 +44,6 @@ class WarmUpAndCosineDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
             # Cosine decay learning rate schedule
             total_steps = self.num_examples * self.num_train_epochs \
                 // self.batch_size + 1
-            # TODO(srbs): Cache this object.
             cosine_decay = tf.keras.optimizers.schedules.CosineDecay(
                 scaled_lr, total_steps - warmup_steps)
             learning_rate = tf.where(step < warmup_steps, learning_rate,

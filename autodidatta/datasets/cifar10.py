@@ -6,49 +6,6 @@ from tensorflow.keras.datasets.cifar10 import load_data
 
 AUTOTUNE = tf.data.AUTOTUNE
 
-"""
-def aug_fn(image, image_size, is_training, pre_train):
-
-    color_jitter_prob = 0.8 if pre_train else 0.
-    grayscale_prob = 0.2 if pre_train else 0.
-
-    if is_training:
-        transforms = A.Compose([
-            A.RandomResizedCrop(image_size, image_size, scale=(0.08, 1.0)),
-            A.HorizontalFlip(),
-            A.ColorJitter(
-                brightness=0.4, contrast=0.4, saturation=0.4,
-                hue=0.2, p=color_jitter_prob),
-            A.ToGray(p=grayscale_prob),
-            A.Normalize(
-                mean=(0.4914, 0.4822, 0.4465), std=(0.247, 0.243, 0.261))]
-        )
-    else:
-        transforms = A.Compose([
-            A.Normalize(
-                mean=(0.4914, 0.4822, 0.4465), std=(0.247, 0.243, 0.261))]
-        )
-
-    # apply augmentation
-    data = {"image": image}
-    aug_data = transforms(**data)
-    aug_img = aug_data["image"]
-    aug_img = tf.image.resize(aug_img, size=[image_size, image_size])
-    aug_img = tf.cast(aug_img, tf.float32)
-    aug_img = tf.clip_by_value(aug_img, 0., 1.)
-
-    return aug_img
-
-
-def aug_fn_tf(image, image_size, is_training, pretrain):
-
-    aug_img = tf.numpy_function(
-        aug_fn,
-        inp=[image, image_size, is_training, pretrain], Tout=tf.float32)
-
-    return aug_img
-"""
-
 
 def aug_fn(image, image_size, is_training, pre_train):
 
