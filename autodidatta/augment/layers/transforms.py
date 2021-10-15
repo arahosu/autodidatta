@@ -234,7 +234,7 @@ class Solarize(ImageOnlyOps):
 
     def call(self, inputs, training=True):
         if training:
-            return tf.where(inputs < threshold, image, 1. - image)
+            return tf.where(inputs < self.threshold, inputs, 1. - inputs)
         else:
             return inputs
 

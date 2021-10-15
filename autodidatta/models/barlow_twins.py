@@ -10,7 +10,8 @@ from tensorflow_addons.optimizers import LAMB, AdamW
 import tensorflow_datasets as tfds
 from tensorflow.keras.callbacks import CSVLogger
 
-from autodidatta.datasets.cifar10 import load_input_fn
+import autodidatta.augment as A
+from autodidatta.datasets import cifar10, stl10
 from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
 from autodidatta.models.networks.mlp import projection_head
 from autodidatta.utils.accelerator import setup_accelerator
@@ -18,11 +19,29 @@ from autodidatta.utils.optimizers import WarmUpAndCosineDecay
 from autodidatta.utils.loss import barlow_twins_loss
 
 
-# Dataset
+# Dataset and Augmentation
 flags.DEFINE_enum(
     'dataset', 'cifar10',
     ['cifar10', 'stl10', 'imagenet'],
     'cifar10 (default), stl10, imagenet')
+flags.DEFINE_integer(
+    'image_size', 32,
+    'image size to be used')
+flags.DEFINE_float(
+    'brightness', 0.4,
+    'random brightness factor')
+flags.DEFINE_float(
+    'contrast', 0.4,
+    'random contrast factor')
+flags.DEFINE_float(
+    'saturation', 0.2,
+    'random saturation factor')
+flags.DEFINE_float(
+    'hue', 0.1,
+    'random hue factor')
+flags.DEFINE_list(
+    'prob_solarization', [0.0, 0.2],
+    'probability of applying solarization augmentation')
 
 # Training
 flags.DEFINE_integer(
@@ -57,8 +76,7 @@ flags.DEFINE_bool(
 flags.DEFINE_float(
     'fraction_data',
     1.0,
-    'fraction of training data to be used during downstream evaluation'
-)
+    'fraction of training data to be used during downstream evaluation')
 flags.DEFINE_bool(
     'online_ft',
     True,
@@ -78,14 +96,12 @@ flags.DEFINE_bool(
     'Whether to save weights. If True, weights are saved in logdir')
 flags.DEFINE_bool(
     'save_history', True,
-    'Whether to save the training history.'
-)
+    'Whether to save the training history.')
 flags.DEFINE_string(
-    'histdir', '/home/User/Self-Supervised-Segmentation/training_logs',
-    'Directory for where the training history is being saved'
-)
+    'histdir', './training_logs',
+    'Directory for where the training history is being saved')
 flags.DEFINE_string(
-    'logdir', '/home/User/Self-Supervised-Segmentation/weights',
+    'logdir', './weights',
     'Directory for where the weights are being saved')
 flags.DEFINE_string(
     'weights', None,
@@ -152,8 +168,10 @@ class BarlowTwins(tf.keras.Model):
         return current_shape
 
     def shared_step(self, data, training):
-
-        x, _ = data
+        if isinstance(data, tuple):
+            x, _ = data
+        else:
+            x = data 
         num_channels = int(x.shape[-1] // 2)
 
         xi = x[..., :num_channels]
@@ -256,18 +274,53 @@ def main(argv):
     strategy = setup_accelerator(
         FLAGS.use_gpu, FLAGS.num_cores, FLAGS.tpu)
 
+    # Define augmentation functions
+    aug_fn_1 = A.Augment([
+        A.layers.RandomResizedCrop(
+            FLAGS.image_size, FLAGS.image_size),
+        A.layers.ColorJitter(
+            FLAGS.brightness,
+            FLAGS.contrast, 
+            FLAGS.saturation,
+            FLAGS.hue, p=0.8),
+        A.layers.ToGray(p=0.2),
+        A.layers.Solarize(p=FLAGS.prob_solarization[0])
+        ])
+        
+    aug_fn_2 = A.Augment([
+        A.layers.RandomResizedCrop(
+            FLAGS.image_size, FLAGS.image_size),
+        A.layers.ColorJitter(
+            FLAGS.brightness,
+            FLAGS.contrast, 
+            FLAGS.saturation,
+            FLAGS.hue, p=0.8),
+        A.layers.ToGray(p=0.2),
+        A.layers.Solarize(p=FLAGS.prob_solarization[1])
+        ])
+
+    # Define image dimension
+    ds_shape = (FLAGS.image_size, FLAGS.image_size, 3)
+
     if FLAGS.dataset == 'cifar10':
-        train_ds = load_input_fn(
-            is_training=True,
-            batch_size=FLAGS.batch_size,
-            image_size=32,
-            pre_train=True)
-        validation_ds = load_input_fn(
-            is_training=False,
-            batch_size=FLAGS.batch_size,
-            image_size=32,
-            pre_train=True)
-        ds_shape = (32, 32, 3)
+        load_dataset = cifar10.load_input_fn
+    elif FLAGS.dataset == 'stl10':
+        load_dataset = stl10.load_input_fn
+
+    train_ds = load_dataset(
+        is_training=True,
+        batch_size=FLAGS.batch_size,
+        image_size=FLAGS.image_size,
+        pre_train=True,
+        aug_fn=aug_fn_1,
+        aug_fn_2=aug_fn_2)
+    validation_ds = load_dataset(
+        is_training=False,
+        batch_size=FLAGS.batch_size,
+        image_size=FLAGS.image_size,
+        pre_train=True,
+        aug_fn=aug_fn_1,
+        aug_fn_2=aug_fn_2)
 
     ds_info = tfds.builder(FLAGS.dataset).info
     num_train_examples = ds_info.splits['train'].num_examples
@@ -296,7 +349,8 @@ def main(argv):
                 classifier = tf.keras.Sequential(
                     [tfkl.Flatten(),
                      tfkl.Dense(512, use_bias=False),
-                     tfkl.BatchNormalization(),
+                     tfkl.experimental.SyncBatchNormalization(
+                        axis=-1, momentum=0.9, epsilon=1.001e-5),
                      tfkl.ReLU(),
                      tfkl.Dense(10, activation='softmax')],
                     name='classifier')
