@@ -304,8 +304,10 @@ def main(argv):
 
     if FLAGS.dataset == 'cifar10':
         load_dataset = cifar10.load_input_fn
+        train_split = 'train'
     elif FLAGS.dataset == 'stl10':
         load_dataset = stl10.load_input_fn
+        train_split = 'unlabelled'
 
     train_ds = load_dataset(
         is_training=True,
@@ -323,7 +325,7 @@ def main(argv):
         aug_fn_2=aug_fn_2)
 
     ds_info = tfds.builder(FLAGS.dataset).info
-    num_train_examples = ds_info.splits['train'].num_examples
+    num_train_examples = ds_info.splits[train_split].num_examples
     num_val_examples = ds_info.splits['test'].num_examples
     steps_per_epoch = num_train_examples // FLAGS.batch_size
     validation_steps = num_val_examples // FLAGS.batch_size

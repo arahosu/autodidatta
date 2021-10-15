@@ -12,3 +12,4 @@
 *.cpython-37.pyc
 
 training_logs/
+scripts/
