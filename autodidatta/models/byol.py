@@ -75,11 +75,11 @@ flags.DEFINE_bool(
     'Whether to save the training history.'
 )
 flags.DEFINE_string(
-    'histdir', '/home/User/autodidatta/training_logs',
+    'histdir', './training_logs',
     'Directory for where the training history is being saved'
 )
 flags.DEFINE_string(
-    'logdir', '/home/User/autodidatta/weights',
+    'logdir', './weights',
     'Directory for where the weights are being saved')
 flags.DEFINE_string(
     'weights', None,

@@ -217,6 +217,27 @@ class ColorJitter(ImageOnlyOps):
         return inputs
 
 
+class Solarize(ImageOnlyOps):
+
+    def __init__(self,
+                 threshold=0.5,
+                 p=0.2,
+                 seed=None,
+                 name=None,
+                 **kwargs):
+        super(Solarize, self).__init__(
+            p=p, seed=seed, name=name, **kwargs
+        )
+
+        self.threshold = threshold
+        self.seed = seed
+
+    def call(self, inputs, training=True):
+        if training:
+            return tf.where(inputs < threshold, image, 1. - image)
+        else:
+            return inputs
+
 class ToGray(ImageOnlyOps):
     def __init__(self, p=0.2, name=None, **kwargs):
         super(ToGray, self).__init__(
