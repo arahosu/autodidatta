@@ -333,6 +333,9 @@ def main(argv):
     validation_steps = num_val_examples // FLAGS.batch_size
 
     with strategy.scope():
+        assert FLAGS.dataset != 'stl10', \
+            'Online finetuning is not supported for stl10'
+
         # load model
         if FLAGS.backbone == 'resnet50':
             backbone = ResNet50(input_shape=ds_shape)

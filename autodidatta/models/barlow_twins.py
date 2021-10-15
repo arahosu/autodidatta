@@ -339,6 +339,9 @@ def main(argv):
 
         # If online finetuning is enabled
         if FLAGS.online_ft:
+            assert FLAGS.dataset != 'stl10', \
+                'Online finetuning is not supported for stl10'
+
             # load model for downstream task evaluation
             if FLAGS.eval_linear:
                 classifier = tf.keras.Sequential(
