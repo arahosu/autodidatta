@@ -135,3 +135,48 @@ def byol_loss(hidden1,
               hidden2):
 
     return 2 - 2*tf.keras.losses.cosine_similarity(hidden1, hidden2)
+
+
+def barlow_twins_loss(hidden1,
+                      hidden2,
+                      lambda_,
+                      loss_temperature=0.025,
+                      strategy=None):
+
+    if strategy is not None:
+        hidden1 = tpu_cross_replica_concat(hidden1, strategy=strategy)
+        hidden2 = tpu_cross_replica_concat(hidden2, strategy=strategy)
+
+    N, D = hidden1.shape[0], hidden2.shape[1]
+    N = tf.cast(N, tf.float32)
+
+    # normalize repr. along the batch dimension
+    zi_norm = (hidden1 - tf.reduce_mean(hidden1, axis=0)) / \
+        tf.math.reduce_std(hidden1, axis=0)  # (b, i)
+    zj_norm = (hidden2 - tf.reduce_mean(hidden2, axis=0)) / \
+        tf.math.reduce_std(hidden2, axis=0)  # (b, j)
+
+    # cross-correlation matrix
+    # c_ij = tf.einsum('bi,bj->ij',
+    #                  tf.math.l2_normalize(zi_norm, axis=0),
+    #                  tf.math.l2_normalize(zj_norm, axis=0)) / N  # (i, j)
+    c_ij = tf.matmul(zi_norm, zj_norm, transpose_a=True) / N
+
+    # for separating invariance and reduction
+    loss_invariance = tf.reduce_sum(
+        tf.square(1. - tf.boolean_mask(c_ij, tf.eye(D, dtype=tf.bool))))
+    loss_reduction = tf.reduce_sum(
+        tf.square(tf.boolean_mask(c_ij, ~tf.eye(D, dtype=tf.bool))))
+
+    loss = loss_invariance + lambda_ * loss_reduction
+
+    # on_diag = tf.linalg.diag_part(c_ij) + (-1)
+    # on_diag = tf.reduce_sum(tf.pow(on_diag, 2))
+    # off_diag = off_diagonal(c_ij)
+    # off_diag = tf.reduce_sum(tf.pow(off_diag, 2))
+    # loss = on_diag + (lambda_ * off_diag)
+
+    loss *= loss_temperature
+    loss /= strategy.num_replicas_in_sync
+
+    return loss
