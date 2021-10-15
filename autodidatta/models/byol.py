@@ -38,7 +38,7 @@ flags.DEFINE_integer(
     'set number of units in the hidden \
      layers of the projection/predictor head')
 flags.DEFINE_integer(
-    'output_dim', 4096,
+    'output_dim', 256,
     'set number of units in the output layer of the projection/predictor head')
 flags.DEFINE_integer(
     'num_head_layers', 1,
@@ -75,11 +75,11 @@ flags.DEFINE_bool(
     'Whether to save the training history.'
 )
 flags.DEFINE_string(
-    'histdir', '/home/User/Self-Supervised-Segmentation/training_logs',
+    'histdir', '/home/User/autodidatta/training_logs',
     'Directory for where the training history is being saved'
 )
 flags.DEFINE_string(
-    'logdir', '/home/User/Self-Supervised-Segmentation/weights',
+    'logdir', '/home/User/autodidatta/weights',
     'Directory for where the weights are being saved')
 flags.DEFINE_string(
     'weights', None,

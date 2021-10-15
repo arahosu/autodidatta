@@ -10,3 +10,5 @@
 **/__pycache__
 *.pyc
 *.cpython-37.pyc
+
+training_logs/
