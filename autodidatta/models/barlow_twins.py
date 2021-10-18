@@ -88,7 +88,7 @@ flags.DEFINE_float(
 flags.DEFINE_enum(
     'backbone', 'resnet18',
     ['resnet50', 'resnet34', 'resnet18'],
-    'resnet50 (default), resnet18, resnet34')
+    'resnet18 (default), resnet34, resnet50')
 
 # logging specification
 flags.DEFINE_bool(

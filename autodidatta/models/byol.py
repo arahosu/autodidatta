@@ -83,7 +83,7 @@ flags.DEFINE_float(
 flags.DEFINE_enum(
     'backbone', 'resnet18',
     ['resnet50', 'resnet34', 'resnet18'],
-    'resnet50 (default), resnet18, resnet34')
+    'resnet18 (default), resnet34, resnet50')
 
 # logging specification
 flags.DEFINE_bool(
@@ -115,11 +115,16 @@ FLAGS = flags.FLAGS
 
 class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
 
-    def __init__(self, init_tau=0.99):
+    def __init__(self, max_steps, init_tau=0.99, final_tau=1.0):
         super(BYOLMAWeightUpdate, self).__init__()
 
+        assert abs(init_tau) <= 1.
+        assert abs(final_tau) <= 1. and init_tau <= final_tau
+
+        self.max_steps = max_steps
         self.init_tau = init_tau
         self.current_tau = init_tau
+        self.final_tau = final_tau
         self.global_step = 0
 
     def on_train_batch_end(self, batch, logs=None):
@@ -128,22 +133,23 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
         self.current_tau = self.update_tau()
 
     def update_tau(self):
-        return 1 - (1 - self.init_tau) * \
-            (math.cos(math.pi * self.global_step) + 1) / 2
+        return self.final_tau - (self.final_tau - self.init_tau) * \
+            (math.cos(math.pi * self.global_step / self.max_steps) + 1) / 2
 
     @tf.function
     def update_weights(self):
         for online_layer, target_layer in zip(
                 self.model.online_network.layers,
                 self.model.target_network.layers):
-            if all(hasattr(target_layer, attr) for attr in ["kernel", "bias"]):
+            if hasattr(target_layer, 'kernel'):
                 target_layer.kernel.assign(self.current_tau *
                                            target_layer.kernel
                                            + (1 - self.current_tau) *
                                            online_layer.kernel)
+            if hasattr(target_layer, 'bias'):
                 target_layer.bias.assign(self.current_tau * target_layer.bias
-                                         + (1 - self.current_tau) *
-                                         online_layer.bias)
+                                            + (1 - self.current_tau) *
+                                            online_layer.bias)
 
 
 class BYOL(tf.keras.Model):
@@ -424,7 +430,9 @@ def main(argv):
     # Define checkpoints
     time = datetime.now().strftime("%Y%m%d-%H%M%S")
     # Moving Average Weight Update Callback
-    movingavg_cb = BYOLMAWeightUpdate(init_tau=FLAGS.init_tau)
+    movingavg_cb = BYOLMAWeightUpdate(
+        max_steps=steps_per_epoch*FLAGS.train_epochs,
+        init_tau=FLAGS.init_tau)
     cb = [movingavg_cb]
     # cb = []
 
