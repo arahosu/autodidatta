@@ -109,6 +109,9 @@ def nt_xent_loss_v2(hidden1,
         labels = tf.one_hot(tf.range(batch_size), batch_size * 2)
         masks = tf.one_hot(tf.range(batch_size), batch_size)
 
+    labels = tf.cast(labels, hidden1.dtype)
+    masks = tf.cast(masks, hidden1.dtype)
+
     logits_aa = tf.matmul(
         hidden1, hidden1_large, transpose_b=True) / temperature
     logits_aa = logits_aa - masks * LARGE_NUM

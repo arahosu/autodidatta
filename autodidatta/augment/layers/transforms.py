@@ -194,6 +194,7 @@ class ColorJitter(ImageOnlyOps):
         self.seed = seed
 
     def call(self, inputs, training=True):
+        image_dtype = inputs.dtype
         perm = tf.random.shuffle(tf.range(4))
         for i in range(4):
             idx = perm[i] if self.random_order else i
@@ -201,6 +202,7 @@ class ColorJitter(ImageOnlyOps):
                 inputs, idx, training=training)
             if self.clip_value:
                 inputs = tf.clip_by_value(inputs, 0., 1.)
+        inputs = tf.cast(inputs, image_dtype)
         return inputs
 
     def apply_transform(self, inputs, i, training=True):
@@ -238,6 +240,7 @@ class Solarize(ImageOnlyOps):
         else:
             return inputs
 
+
 class ToGray(ImageOnlyOps):
     def __init__(self, p=0.2, name=None, **kwargs):
         super(ToGray, self).__init__(
@@ -245,9 +248,11 @@ class ToGray(ImageOnlyOps):
         )
 
     def call(self, inputs, training=True):
+        image_dtype = inputs.dtype
         if training:
             image = tf.image.rgb_to_grayscale(inputs)
             image = tf.tile(image, [1, 1, 3])
+            image = tf.cast(image, image_dtype)
             return image
         else:
             return inputs

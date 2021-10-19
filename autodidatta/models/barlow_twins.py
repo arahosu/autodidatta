@@ -273,11 +273,15 @@ def main(argv):
 
     strategy = setup_accelerator(
         FLAGS.use_gpu, FLAGS.num_cores, FLAGS.tpu)
+    
+    if FLAGS.use_bfloat16:
+        tf.keras.mixed_precision.set_global_policy('mixed_bfloat16')
 
     # Define augmentation functions
     aug_fn_1 = A.Augment([
         A.layers.RandomResizedCrop(
             FLAGS.image_size, FLAGS.image_size),
+        A.layers.HorizontalFlip(),
         A.layers.ColorJitter(
             FLAGS.brightness,
             FLAGS.contrast, 
@@ -290,6 +294,7 @@ def main(argv):
     aug_fn_2 = A.Augment([
         A.layers.RandomResizedCrop(
             FLAGS.image_size, FLAGS.image_size),
+        A.layers.HorizontalFlip(),
         A.layers.ColorJitter(
             FLAGS.brightness,
             FLAGS.contrast, 
@@ -315,14 +320,16 @@ def main(argv):
         image_size=FLAGS.image_size,
         pre_train=True,
         aug_fn=aug_fn_1,
-        aug_fn_2=aug_fn_2)
+        aug_fn_2=aug_fn_2,
+        use_bfloat16=FLAGS.use_bfloat16)
     validation_ds = load_dataset(
         is_training=False,
         batch_size=FLAGS.batch_size,
         image_size=FLAGS.image_size,
         pre_train=True,
         aug_fn=aug_fn_1,
-        aug_fn_2=aug_fn_2)
+        aug_fn_2=aug_fn_2,
+        use_bfloat16=FLAGS.use_bfloat16)
 
     ds_info = tfds.builder(FLAGS.dataset).info
     num_train_examples = ds_info.splits[train_split].num_examples
