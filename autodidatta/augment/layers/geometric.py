@@ -101,6 +101,8 @@ class RandomResizedCrop(DualOps):
 
             image = tf.image.resize(
                 image, [self.height, self.width], self.interpolation)
+            
+            image = tf.cast(image, image_dtype)
 
             image = tf.cast(image, image_dtype)
 

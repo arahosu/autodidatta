@@ -14,7 +14,8 @@ def load_input_fn(is_training,
                   aug_fn,
                   aug_fn_2=None,
                   drop_remainder=True,
-                  proportion=1.0):
+                  proportion=1.0,
+                  use_bfloat16=True):
 
     """CIFAR10 dataset loader for training or testing.
     Args:
@@ -27,6 +28,7 @@ def load_input_fn(is_training,
     drop_remainder (bool): Whether to drop the last batch if it has fewer than
     batch_size elements
     proportion (float): The proportion of training images to be used.
+    use_bfloat16 (bool): True if set dtype to bfloat16, False to set dtype to float32
     Returns:
     Input function which returns a cifar10 dataset.
     """
@@ -36,8 +38,9 @@ def load_input_fn(is_training,
     dataset_size = ds_info.splits['train'].num_examples
 
     def preprocess(image, label):
-        image = tf.image.convert_image_dtype(image, tf.float32)
-        label = tf.cast(label, tf.float32)
+        dtype = tf.bfloat16 if use_bfloat16 else tf.float32
+        image = tf.image.convert_image_dtype(image, dtype)
+        label = tf.cast(label, dtype)
 
         if pre_train:
             xs = []

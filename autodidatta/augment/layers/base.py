@@ -48,7 +48,6 @@ class ImageOnlyOps(BaseOps):
 class DualOps(BaseOps):
 
     def apply(self, image, seg=None, training=True):
-
         cond = tf.less(
             tf.random.uniform([], seed=self.seed), self.p)
         if seg is not None:
