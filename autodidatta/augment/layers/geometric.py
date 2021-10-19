@@ -76,6 +76,7 @@ class RandomResizedCrop(DualOps):
         self.interpolation = interpolation
 
     def call(self, inputs, training=True):
+        image_dtype = inputs.dtype
         if training:
             bbox = tf.constant(
                 [0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])
@@ -100,6 +101,8 @@ class RandomResizedCrop(DualOps):
 
             image = tf.image.resize(
                 image, [self.height, self.width], self.interpolation)
+
+            image = tf.cast(image, image_dtype)
 
             return image
         else:
