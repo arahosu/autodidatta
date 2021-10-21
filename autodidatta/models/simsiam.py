@@ -14,6 +14,7 @@ import autodidatta.augment as A
 from autodidatta.datasets import cifar10, stl10
 from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
 from autodidatta.models.networks.mlp import projection_head, predictor_head
+from autodidatta.utils.optimizers import WarmUpAndCosineDecay
 from autodidatta.utils.accelerator import setup_accelerator
 
 
@@ -45,16 +46,19 @@ flags.DEFINE_list(
 flags.DEFINE_integer(
     'train_epochs', 1000, 'Number of epochs to train the model')
 flags.DEFINE_enum(
-    'optimizer', 'adam', ['lamb', 'adam', 'sgd', 'adamw'],
+    'optimizer', 'adamw', ['lamb', 'adam', 'sgd', 'adamw'],
     'optimizer for pre-training')
 flags.DEFINE_integer('batch_size', 512, 'set batch size for pre-training.')
 flags.DEFINE_float('learning_rate', 1e-03, 'set learning rate for optimizer.')
+flags.DEFINE_integer(
+    'warmup_epochs', 10,
+    'number of warmup epochs for learning rate scheduler')
 flags.DEFINE_integer(
     'hidden_dim', 2048,
     'set number of units in the hidden \
      layers of the projection/predictor head')
 flags.DEFINE_integer(
-    'output_dim', 512,
+    'output_dim', 256,
     'set number of units in the output layer of the projection/predictor head')
 flags.DEFINE_integer(
     'num_head_layers', 1,
@@ -91,11 +95,11 @@ flags.DEFINE_bool(
     'Whether to save the training history.'
 )
 flags.DEFINE_string(
-    'histdir', '/home/User/Self-Supervised-Segmentation/training_logs',
+    'histdir', './training_logs',
     'Directory for where the training history is being saved'
 )
 flags.DEFINE_string(
-    'logdir', '/home/User/Self-Supervised-Segmentation/weights',
+    'logdir', './weights',
     'Directory for where the weights are being saved')
 flags.DEFINE_string(
     'weights', None,
@@ -389,22 +393,52 @@ def main(argv):
         elif FLAGS.optimizer == 'adam':
             optimizer = Adam(learning_rate=FLAGS.learning_rate)
         elif FLAGS.optimizer == 'sgd':
-            optimizer = SGD(learning_rate=FLAGS.learning_rate)
+            lr_schedule = WarmUpAndCosineDecay(
+                FLAGS.learning_rate, num_train_examples,
+                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+            optimizer = SGD(
+                learning_rate=lr_schedule, momentum=0.9, nesterov=True)
         elif FLAGS.optimizer == 'adamw':
+            lr_schedule = WarmUpAndCosineDecay(
+                FLAGS.learning_rate, num_train_examples,
+                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
             optimizer = AdamW(
-                weight_decay=1e-06, learning_rate=FLAGS.learning_rate)
+                weight_decay=1e-06, learning_rate=lr_schedule)
 
         if classifier is not None:
+            if FLAGS.optimizer == 'lamb':
+                ft_optimizer = LAMB(
+                    learning_rate=FLAGS.ft_learning_rate,
+                    weight_decay_rate=1e-04,
+                    exclude_from_weight_decay=['bias', 'BatchNormalization'])
+            elif FLAGS.optimizer == 'adam':
+                ft_optimizer = Adam(learning_rate=FLAGS.ft_learning_rate)
+            elif FLAGS.optimizer == 'sgd':
+                lr_schedule = WarmUpAndCosineDecay(
+                    FLAGS.ft_learning_rate, num_train_examples,
+                    FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+                ft_optimizer = SGD(
+                    learning_rate=lr_schedule, momentum=0.9, nesterov=True)
+            elif FLAGS.optimizer == 'adamw':
+                lr_schedule = WarmUpAndCosineDecay(
+                    FLAGS.ft_learning_rate, num_train_examples,
+                    FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+                ft_optimizer = AdamW(
+                    weight_decay=1e-06, learning_rate=lr_schedule)
+
             model.compile(
                 optimizer=optimizer,
                 loss_fn=tf.keras.losses.cosine_similarity,
-                ft_optimizer=tf.keras.optimizers.Adam(
-                    learning_rate=FLAGS.ft_learning_rate),
+                ft_optimizer=ft_optimizer,
                 loss=loss,
                 metrics=metrics)
         else:
             model.compile(optimizer=optimizer,
                           loss_fn=tf.keras.losses.cosine_similarity)
+        
+        # Build the model
+        model.build((None, *ds_shape))
+        model.summary()
 
     # Define checkpoints
     time = datetime.now().strftime("%Y%m%d-%H%M%S")

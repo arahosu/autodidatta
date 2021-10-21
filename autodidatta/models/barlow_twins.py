@@ -398,8 +398,11 @@ def main(argv):
             optimizer = SGD(
                 learning_rate=lr_schedule, momentum=0.9, nesterov=True)
         elif FLAGS.optimizer == 'adamw':
+            lr_schedule = WarmUpAndCosineDecay(
+                FLAGS.learning_rate, num_train_examples,
+                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
             optimizer = AdamW(
-                weight_decay=1e-06, learning_rate=FLAGS.learning_rate)
+                weight_decay=1e-06, learning_rate=lr_schedule)
 
         if classifier is not None:
             if FLAGS.optimizer == 'lamb':
@@ -416,8 +419,11 @@ def main(argv):
                 ft_optimizer = SGD(
                     learning_rate=lr_schedule, momentum=0.9, nesterov=True)
             elif FLAGS.optimizer == 'adamw':
+                lr_schedule = WarmUpAndCosineDecay(
+                    FLAGS.ft_learning_rate, num_train_examples,
+                    FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
                 ft_optimizer = AdamW(
-                    weight_decay=1e-06, learning_rate=FLAGS.ft_learning_rate)
+                    weight_decay=1e-06, learning_rate=lr_schedule)
 
             model.compile(
                 optimizer=optimizer,
@@ -428,6 +434,10 @@ def main(argv):
         else:
             model.compile(optimizer=optimizer,
                           loss_fn=barlow_twins_loss)
+        
+        # Build the model
+        model.build((None, *ds_shape))
+        model.summary()
 
     # Define checkpoints
     time = datetime.now().strftime("%Y%m%d-%H%M%S")

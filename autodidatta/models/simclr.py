@@ -47,7 +47,7 @@ flags.DEFINE_list(
 flags.DEFINE_integer(
     'train_epochs', 1000, 'Number of epochs to train the model')
 flags.DEFINE_enum(
-    'optimizer', 'adam', ['lamb', 'adam', 'sgd', 'adamw'],
+    'optimizer', 'adamw', ['lamb', 'adam', 'sgd', 'adamw'],
     'optimizer for pre-training')
 flags.DEFINE_float(
     'loss_temperature', 0.5, 'set temperature for loss function')
@@ -432,6 +432,10 @@ def main(argv):
         else:
             model.compile(optimizer=optimizer,
                           loss_fn=nt_xent_loss_v2)
+
+        # Build the model
+        model.build((None, *ds_shape))
+        model.summary()
 
     # Define checkpoints
     time = datetime.now().strftime("%Y%m%d-%H%M%S")
