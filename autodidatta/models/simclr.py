@@ -61,7 +61,7 @@ flags.DEFINE_integer(
     'set number of units in the hidden \
      layers of the projection/predictor head')
 flags.DEFINE_integer(
-    'output_dim', 512,
+    'output_dim', 256,
     'set number of units in the output layer of the projection/predictor head')
 flags.DEFINE_integer(
     'num_head_layers', 1,
@@ -91,7 +91,7 @@ flags.DEFINE_enum(
 
 # logging specification
 flags.DEFINE_bool(
-    'save_weights', False,
+    'save_weights', True,
     'Whether to save weights. If True, weights are saved in logdir')
 flags.DEFINE_bool(
     'save_history', True,
@@ -398,8 +398,12 @@ def main(argv):
             optimizer = SGD(
                 learning_rate=lr_schedule, momentum=0.9, nesterov=True)
         elif FLAGS.optimizer == 'adamw':
+            lr_schedule = WarmUpAndCosineDecay(
+                FLAGS.learning_rate, num_train_examples,
+                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
             optimizer = AdamW(
-                weight_decay=1e-06, learning_rate=FLAGS.learning_rate)
+                weight_decay=1e-06, learning_rate=lr_schedule)
+            
 
         if classifier is not None:
             if FLAGS.optimizer == 'lamb':
@@ -410,14 +414,14 @@ def main(argv):
             elif FLAGS.optimizer == 'adam':
                 ft_optimizer = Adam(learning_rate=FLAGS.ft_learning_rate)
             elif FLAGS.optimizer == 'sgd':
+                ft_optimizer = SGD(
+                    learning_rate=FLAGS.ft_learning_rate, momentum=0.9, nesterov=True)
+            elif FLAGS.optimizer == 'adamw':
                 lr_schedule = WarmUpAndCosineDecay(
                     FLAGS.ft_learning_rate, num_train_examples,
                     FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
-                ft_optimizer = SGD(
-                    learning_rate=lr_schedule, momentum=0.9, nesterov=True)
-            elif FLAGS.optimizer == 'adamw':
                 ft_optimizer = AdamW(
-                    weight_decay=1e-06, learning_rate=FLAGS.ft_learning_rate)
+                    weight_decay=1e-06, learning_rate=lr_schedule)
 
             model.compile(
                 optimizer=optimizer,
@@ -460,7 +464,7 @@ def main(argv):
 
     if FLAGS.save_weights:
         weights_name = 'simclr_weights.hdf5'
-        model.save_weights(os.path.join(logdir, weights_name))
+        model.save_weights(os.path.join(logdir, weights_name), save_backbone_only=True)
 
 
 if __name__ == '__main__':
