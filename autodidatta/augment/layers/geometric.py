@@ -104,6 +104,8 @@ class RandomResizedCrop(DualOps):
             
             image = tf.cast(image, image_dtype)
 
+            image = tf.cast(image, image_dtype)
+
             return image
         else:
             return inputs
