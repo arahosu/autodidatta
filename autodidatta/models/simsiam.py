@@ -58,8 +58,8 @@ flags.DEFINE_integer(
     'set number of units in the hidden \
      layers of the projection/predictor head')
 flags.DEFINE_integer(
-    'output_dim', 256,
-    'set number of units in the output layer of the projection/predictor head')
+    'output_dim', 512,
+    'set number of units in the output layer of the predictor head')
 flags.DEFINE_integer(
     'num_head_layers', 1,
     'set number of intermediate layers in the projection head')
@@ -375,7 +375,7 @@ def main(argv):
         model = SimSiam(backbone=backbone,
                         projection=projection_head(
                             hidden_dim=FLAGS.hidden_dim,
-                            output_dim=FLAGS.output_dim,
+                            output_dim=FLAGS.hidden_dim,
                             num_layers=FLAGS.num_head_layers,
                             batch_norm_output=True),
                         predictor=predictor_head(

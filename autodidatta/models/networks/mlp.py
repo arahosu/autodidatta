@@ -22,7 +22,8 @@ def projection_head(hidden_dim=2048,
                 axis=-1, momentum=0.9, epsilon=1.001e-5))
         model.add(tfkl.ReLU())
 
-    model.add(tfkl.Dense(output_dim, use_bias=True))
+    model.add(tfkl.Dense(
+        output_dim, use_bias=False if batch_norm_output else True))
     if batch_norm_output:
         if global_bn:
             model.add(tfkl.experimental.SyncBatchNormalization(
