@@ -54,12 +54,16 @@ flags.DEFINE_integer(
     'warmup_epochs', 10,
     'number of warmup epochs for learning rate scheduler')
 flags.DEFINE_integer(
-    'hidden_dim', 2048,
+    'proj_hidden_dim', 2048,
     'set number of units in the hidden \
-     layers of the projection/predictor head')
+     layers of the projection head')
+flags.DEFINE_integer(
+    'pred_hidden_dim', 512,
+    'set number of units in the hidden \
+     layers of the projection head')
 flags.DEFINE_integer(
     'output_dim', 512,
-    'set number of units in the output layer of the predictor head')
+    'set number of units in the output layer of the projection/predictor head')
 flags.DEFINE_integer(
     'num_head_layers', 1,
     'set number of intermediate layers in the projection head')
@@ -374,12 +378,12 @@ def main(argv):
 
         model = SimSiam(backbone=backbone,
                         projection=projection_head(
-                            hidden_dim=FLAGS.hidden_dim,
-                            output_dim=FLAGS.hidden_dim,
+                            hidden_dim=FLAGS.proj_hidden_dim,
+                            output_dim=FLAGS.output_dim,
                             num_layers=FLAGS.num_head_layers,
                             batch_norm_output=True),
                         predictor=predictor_head(
-                            hidden_dim=FLAGS.hidden_dim,
+                            hidden_dim=FLAGS.pred_hidden_dim,
                             output_dim=FLAGS.output_dim,
                             num_layers=FLAGS.num_head_layers),
                         classifier=classifier)
