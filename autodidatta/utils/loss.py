@@ -145,13 +145,14 @@ def barlow_twins_loss(hidden1,
                       lambda_,
                       loss_temperature=0.025,
                       strategy=None):
+    dtype = hidden1.dtype
 
     if strategy is not None:
         hidden1 = tpu_cross_replica_concat(hidden1, strategy=strategy)
         hidden2 = tpu_cross_replica_concat(hidden2, strategy=strategy)
 
     N, D = hidden1.shape[0], hidden2.shape[1]
-    N = tf.cast(N, tf.float32)
+    N = tf.cast(N, dtype)
 
     # normalize repr. along the batch dimension
     zi_norm = (hidden1 - tf.reduce_mean(hidden1, axis=0)) / \

@@ -17,6 +17,8 @@ from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
 from autodidatta.models.networks.mlp import projection_head, predictor_head
 from autodidatta.utils.loss import byol_loss
 from autodidatta.utils.accelerator import setup_accelerator
+from autodidatta.utils.optimizers import WarmUpAndCosineDecay
+
 
 # Dataset and Augmentation
 flags.DEFINE_enum(
@@ -46,12 +48,15 @@ flags.DEFINE_list(
 flags.DEFINE_integer(
     'train_epochs', 1000, 'Number of epochs to train the model')
 flags.DEFINE_enum(
-    'optimizer', 'adam', ['lamb', 'adam', 'sgd', 'adamw'],
+    'optimizer', 'adamw', ['lamb', 'adam', 'sgd', 'adamw'],
     'optimizer for pre-training')
 flags.DEFINE_float(
     'init_tau', 0.99, 'initial tau parameter for target network update')
 flags.DEFINE_integer('batch_size', 512, 'set batch size for pre-training.')
-flags.DEFINE_float('learning_rate', 1e-03, 'set learning rate for optimizer.')
+flags.DEFINE_float('learning_rate', 5e-04, 'set learning rate for optimizer.')
+flags.DEFINE_integer(
+    'warmup_epochs', 10,
+    'number of warmup epochs for learning rate scheduler')
 flags.DEFINE_integer(
     'hidden_dim', 4096,
     'set number of units in the hidden \
@@ -77,7 +82,7 @@ flags.DEFINE_bool(
     True,
     'set whether to enable online finetuning (True by default)')
 flags.DEFINE_float(
-    'ft_learning_rate', 2e-04, 'set learning rate for finetuning optimizer')
+    'ft_learning_rate', 1e-04, 'set learning rate for finetuning optimizer')
 
 # Model specification args
 flags.DEFINE_enum(
@@ -417,17 +422,42 @@ def main(argv):
         elif FLAGS.optimizer == 'adam':
             optimizer = Adam(learning_rate=FLAGS.learning_rate)
         elif FLAGS.optimizer == 'sgd':
-            optimizer = SGD(learning_rate=FLAGS.learning_rate)
+            lr_schedule = WarmUpAndCosineDecay(
+                FLAGS.learning_rate, num_train_examples,
+                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+            optimizer = SGD(learning_rate=lr_schedule)
         elif FLAGS.optimizer == 'adamw':
+            lr_schedule = WarmUpAndCosineDecay(
+                FLAGS.learning_rate, num_train_examples,
+                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
             optimizer = AdamW(
-                weight_decay=1e-06, learning_rate=FLAGS.learning_rate)
+                weight_decay=1e-06, learning_rate=lr_schedule)
 
         if classifier is not None:
+            if FLAGS.optimizer == 'lamb':
+                ft_optimizer = LAMB(
+                    learning_rate=FLAGS.ft_learning_rate,
+                    weight_decay_rate=1e-04,
+                    exclude_from_weight_decay=['bias', 'BatchNormalization'])
+            elif FLAGS.optimizer == 'adam':
+                ft_optimizer = Adam(learning_rate=FLAGS.ft_learning_rate)
+            elif FLAGS.optimizer == 'sgd':
+                lr_schedule = WarmUpAndCosineDecay(
+                    FLAGS.ft_learning_rate, num_train_examples,
+                    FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+                ft_optimizer = SGD(
+                    learning_rate=lr_schedule, momentum=0.9, nesterov=True)
+            elif FLAGS.optimizer == 'adamw':
+                lr_schedule = WarmUpAndCosineDecay(
+                    FLAGS.ft_learning_rate, num_train_examples,
+                    FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+                ft_optimizer = AdamW(
+                    weight_decay=1e-06, learning_rate=lr_schedule)
+
             model.compile(
                 optimizer=optimizer,
                 loss_fn=byol_loss,
-                ft_optimizer=tf.keras.optimizers.Adam(
-                    learning_rate=FLAGS.ft_learning_rate),
+                ft_optimizer=ft_optimizer,
                 loss=loss,
                 metrics=metrics)
         else:
@@ -436,12 +466,12 @@ def main(argv):
 
     # Define checkpoints
     time = datetime.now().strftime("%Y%m%d-%H%M%S")
+
     # Moving Average Weight Update Callback
     movingavg_cb = BYOLMAWeightUpdate(
         max_steps=steps_per_epoch*FLAGS.train_epochs,
         init_tau=FLAGS.init_tau)
     cb = [movingavg_cb]
-    # cb = []
 
     if FLAGS.save_weights:
         logdir = os.path.join(FLAGS.logdir, time)

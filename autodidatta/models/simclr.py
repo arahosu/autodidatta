@@ -379,7 +379,7 @@ def main(argv):
                 hidden_dim=FLAGS.hidden_dim,
                 output_dim=FLAGS.output_dim,
                 num_layers=FLAGS.num_head_layers,
-                batch_norm_output=False),
+                batch_norm_output=True),
             classifier=classifier,
             loss_temperature=FLAGS.loss_temperature)
 

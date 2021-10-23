@@ -47,14 +47,14 @@ flags.DEFINE_list(
 flags.DEFINE_integer(
     'train_epochs', 1000, 'Number of epochs to train the model')
 flags.DEFINE_enum(
-    'optimizer', 'adam', ['lamb', 'adam', 'sgd', 'adamw'],
+    'optimizer', 'adamw', ['lamb', 'adam', 'sgd', 'adamw'],
     'optimizer for pre-training')
 flags.DEFINE_float(
     'lambda_', 0.005, 'set scaling for the redundancy reduction term')
 flags.DEFINE_float(
     'loss_temperature', 0.1, 'set scaling for loss function')
 flags.DEFINE_integer('batch_size', 512, 'set batch size for pre-training.')
-flags.DEFINE_float('learning_rate', 1e-03, 'set learning rate for optimizer.')
+flags.DEFINE_float('learning_rate', 5e-04, 'set learning rate for optimizer.')
 flags.DEFINE_integer(
     'warmup_epochs', 10,
     'number of warmup epochs for learning rate scheduler')
@@ -82,7 +82,7 @@ flags.DEFINE_bool(
     True,
     'set whether to enable online finetuning (True by default)')
 flags.DEFINE_float(
-    'ft_learning_rate', 2e-04, 'set learning rate for finetuning optimizer')
+    'ft_learning_rate', 1e-04, 'set learning rate for finetuning optimizer')
 
 # Model specification args
 flags.DEFINE_enum(
