@@ -49,7 +49,7 @@ flags.DEFINE_enum(
     'optimizer', 'adamw', ['lamb', 'adam', 'sgd', 'adamw'],
     'optimizer for pre-training')
 flags.DEFINE_integer('batch_size', 512, 'set batch size for pre-training.')
-flags.DEFINE_float('learning_rate', 1e-03, 'set learning rate for optimizer.')
+flags.DEFINE_float('learning_rate', 5e-04, 'set learning rate for optimizer.')
 flags.DEFINE_integer(
     'warmup_epochs', 10,
     'number of warmup epochs for learning rate scheduler')
@@ -82,7 +82,7 @@ flags.DEFINE_bool(
     True,
     'set whether to enable online finetuning (True by default)')
 flags.DEFINE_float(
-    'ft_learning_rate', 2e-04, 'set learning rate for finetuning optimizer')
+    'ft_learning_rate', 1e-04, 'set learning rate for finetuning optimizer')
 
 # Model specification args
 flags.DEFINE_enum(
@@ -222,7 +222,7 @@ class SimSiam(tf.keras.Model):
         with tf.GradientTape() as tape:
             loss = self.shared_step(data, training=True)
         trainable_variables = self.backbone.trainable_variables + \
-            self.projection.trainable_variables + \
+            + self.projection.trainable_variables + \
             self.predictor.trainable_variables
         grads = tape.gradient(loss, trainable_variables)
         self.optimizer.apply_gradients(zip(grads, trainable_variables))
