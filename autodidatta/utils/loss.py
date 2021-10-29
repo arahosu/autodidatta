@@ -135,9 +135,17 @@ def nt_xent_loss_v2(hidden1,
 
 
 def byol_loss(hidden1,
-              hidden2):
+              hidden2,
+              strategy=None):
 
-    return 2 - 2*tf.keras.losses.cosine_similarity(hidden1, hidden2)
+    hidden1 = tf.math.l2_normalize(hidden1, axis=-1)
+    hidden2 = tf.math.l2_normalize(hidden2, axis=-1)
+
+    loss = 2 - 2 * tf.math.reduce_mean(tf.math.reduce_sum(hidden1 * hidden2, axis=-1))
+
+    loss /= strategy.num_replicas_in_sync
+
+    return loss
 
 
 def barlow_twins_loss(hidden1,
