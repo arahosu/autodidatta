@@ -70,6 +70,9 @@ flags.DEFINE_integer(
 flags.DEFINE_bool(
     'eval_linear', True,
     'Set whether to run linear (Default) or non-linear evaluation protocol')
+flags.DEFINE_bool(
+    'train_projection', True,
+    'Set whether to train the projection head or not (Default)')
 
 # Finetuning
 flags.DEFINE_float(
@@ -124,7 +127,8 @@ class SimSiam(tf.keras.Model):
                  backbone,
                  projection,
                  predictor,
-                 classifier=None):
+                 classifier=None,
+                 train_projection=True):
 
         super(SimSiam, self).__init__()
 
@@ -132,6 +136,7 @@ class SimSiam(tf.keras.Model):
         self.projection = projection
         self.predictor = predictor
         self.classifier = classifier
+        self.train_projection = train_projection
 
     def build(self, input_shape):
 
@@ -222,8 +227,9 @@ class SimSiam(tf.keras.Model):
         with tf.GradientTape() as tape:
             loss = self.shared_step(data, training=True)
         trainable_variables = self.backbone.trainable_variables + \
-            + self.projection.trainable_variables + \
             self.predictor.trainable_variables
+        if self.train_projection:
+            trainable_variables += self.projection.trainable_variables
         grads = tape.gradient(loss, trainable_variables)
         self.optimizer.apply_gradients(zip(grads, trainable_variables))
 
@@ -386,7 +392,8 @@ def main(argv):
                             hidden_dim=FLAGS.pred_hidden_dim,
                             output_dim=FLAGS.output_dim,
                             num_layers=FLAGS.num_head_layers),
-                        classifier=classifier)
+                        classifier=classifier,
+                        train_projection=FLAGS.train_projection)
 
         # select optimizer
         lr_schedule = WarmUpAndCosineDecay(

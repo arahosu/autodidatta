@@ -70,13 +70,15 @@ flags.DEFINE_integer(
 flags.DEFINE_bool(
     'eval_linear', True,
     'Set whether to run linear (Default) or non-linear evaluation protocol')
+flags.DEFINE_bool(
+    'train_projection', True,
+    'Set whether to train the projection head or not (Default)')
 
 # Finetuning
 flags.DEFINE_float(
     'fraction_data',
     1.0,
-    'fraction of training data to be used during downstream evaluation'
-)
+    'fraction of training data to be used during downstream evaluation')
 flags.DEFINE_bool(
     'online_ft',
     True,
@@ -435,6 +437,7 @@ def main(argv):
         lr_schedule = WarmUpAndCosineDecay(
                 FLAGS.learning_rate, num_train_examples,
                 FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+
         if FLAGS.optimizer == 'lamb':
             optimizer = LAMB(
                 learning_rate=lr_schedule,
@@ -486,7 +489,8 @@ def main(argv):
     # Moving Average Weight Update Callback
     movingavg_cb = BYOLMAWeightUpdate(
         max_steps=steps_per_epoch*FLAGS.train_epochs,
-        init_tau=FLAGS.init_tau)
+        init_tau=FLAGS.init_tau,
+        update_projection=FLAGS.train_projection)
     cb = [movingavg_cb]
 
     if FLAGS.save_weights:

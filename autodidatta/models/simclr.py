@@ -384,44 +384,41 @@ def main(argv):
             loss_temperature=FLAGS.loss_temperature)
 
         # select optimizer
+        lr_schedule = WarmUpAndCosineDecay(
+                FLAGS.learning_rate, num_train_examples,
+                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+
         if FLAGS.optimizer == 'lamb':
             optimizer = LAMB(
-                learning_rate=FLAGS.learning_rate,
-                weight_decay_rate=1e-04,
+                learning_rate=lr_schedule,
+                weight_decay_rate=1e-06,
                 exclude_from_weight_decay=['bias', 'BatchNormalization'])
         elif FLAGS.optimizer == 'adam':
-            optimizer = Adam(learning_rate=FLAGS.learning_rate)
+            optimizer = Adam(learning_rate=lr_schedule)
         elif FLAGS.optimizer == 'sgd':
-            lr_schedule = WarmUpAndCosineDecay(
-                FLAGS.learning_rate, num_train_examples,
-                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
-            optimizer = SGD(
-                learning_rate=lr_schedule, momentum=0.9, nesterov=True)
+            optimizer = SGD(learning_rate=lr_schedule, momentum=0.9)
         elif FLAGS.optimizer == 'adamw':
-            lr_schedule = WarmUpAndCosineDecay(
-                FLAGS.learning_rate, num_train_examples,
-                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
             optimizer = AdamW(
                 weight_decay=1e-06, learning_rate=lr_schedule)
-            
+
+        ft_lr_schedule = WarmUpAndCosineDecay(
+                    FLAGS.ft_learning_rate, num_train_examples,
+                    FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
 
         if classifier is not None:
             if FLAGS.optimizer == 'lamb':
                 ft_optimizer = LAMB(
-                    learning_rate=FLAGS.ft_learning_rate,
-                    weight_decay_rate=1e-04,
+                    learning_rate=ft_lr_schedule,
+                    weight_decay_rate=1e-06,
                     exclude_from_weight_decay=['bias', 'BatchNormalization'])
             elif FLAGS.optimizer == 'adam':
-                ft_optimizer = Adam(learning_rate=FLAGS.ft_learning_rate)
+                ft_optimizer = Adam(learning_rate=ft_lr_schedule)
             elif FLAGS.optimizer == 'sgd':
                 ft_optimizer = SGD(
-                    learning_rate=FLAGS.ft_learning_rate, momentum=0.9, nesterov=True)
+                    learning_rate=ft_lr_schedule, momentum=0.9, nesterov=False)
             elif FLAGS.optimizer == 'adamw':
-                lr_schedule = WarmUpAndCosineDecay(
-                    FLAGS.ft_learning_rate, num_train_examples,
-                    FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
                 ft_optimizer = AdamW(
-                    weight_decay=1e-06, learning_rate=lr_schedule)
+                    weight_decay=1e-06, learning_rate=ft_lr_schedule)
 
             model.compile(
                 optimizer=optimizer,
