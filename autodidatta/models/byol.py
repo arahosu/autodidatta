@@ -92,7 +92,7 @@ flags.DEFINE_enum(
 
 # logging specification
 flags.DEFINE_bool(
-    'save_weights', False,
+    'save_weights', True,
     'Whether to save weights. If True, weights are saved in logdir')
 flags.DEFINE_bool(
     'save_history', True,
@@ -120,7 +120,11 @@ FLAGS = flags.FLAGS
 
 class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
 
-    def __init__(self, max_steps, init_tau=0.99, final_tau=1.0):
+    def __init__(self,
+                 max_steps,
+                 init_tau=0.99,
+                 final_tau=1.0,
+                 update_projection=False):
         super(BYOLMAWeightUpdate, self).__init__()
 
         assert abs(init_tau) <= 1.
@@ -131,11 +135,12 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
         self.current_tau = init_tau
         self.final_tau = final_tau
         self.global_step = 0
+        self.update_projection = update_projection
 
     def on_train_batch_end(self, batch, logs=None):
-        self.global_step += 1
         self.update_weights()
         self.current_tau = self.update_tau()
+        self.global_step += 1
 
     def update_tau(self):
         return self.final_tau - (self.final_tau - self.init_tau) * \
@@ -144,48 +149,70 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
     @tf.function
     def update_weights(self):
         for online_layer, target_layer in zip(
-                self.model.online_network.layers,
-                self.model.target_network.layers):
+            self.model.online_backbone.layers,
+            self.model.target_backbone.layers):
             if hasattr(target_layer, 'kernel'):
-                target_layer.kernel.assign(self.current_tau *
-                                           target_layer.kernel
-                                           + (1 - self.current_tau) *
-                                           online_layer.kernel)
+                target_layer.kernel.assign(self.current_tau * target_layer.kernel 
+                                           + (1 - self.current_tau) * online_layer.kernel)
             if hasattr(target_layer, 'bias'):
-                target_layer.bias.assign(self.current_tau * target_layer.bias
-                                            + (1 - self.current_tau) *
-                                            online_layer.bias)
+                target_layer.bias.assign(self.current_tau * target_layer.bias 
+                                         + (1 - self.current_tau) * online_layer.bias)
+
+        if self.update_projection:
+            for online_layer, target_layer in zip(
+                self.model.online_projection.layers,
+                self.model.target_projection.layers):
+                if hasattr(target_layer, 'kernel'):
+                    target_layer.kernel.assign(self.current_tau * 
+                    target_layer.kernel + (1 - self.current_tau) * 
+                    online_layer.kernel)
+                if hasattr(target_layer, 'bias'):
+                    if target_layer.bias is not None:
+                        target_layer.bias.assign(self.current_tau * 
+                        target_layer.bias + (1 - self.current_tau) * 
+                        online_layer.bias)
 
 
 class BYOL(tf.keras.Model):
 
     def __init__(self,
-                 online_network,
-                 target_network,
+                 backbone,
+                 projection,
+                 predictor,
                  classifier=None):
 
         super(BYOL, self).__init__()
 
-        self.online_network = online_network
-        self.target_network = target_network
+        self.online_backbone = backbone
+        self.online_projection = projection
+        self.predictor = predictor
+
+        self.target_backbone = tf.keras.models.clone_model(backbone)
+        self.target_projection = tf.keras.models.clone_model(projection)
+
         self.classifier = classifier
 
     def build(self, input_shape):
 
-        self.online_network.build(input_shape)
+        self.online_backbone.build(input_shape)
+        self.online_projection.build(
+            self.online_backbone.compute_output_shape(input_shape))
+        self.predictor.build(
+            self.online_projection.compute_output_shape(
+                self.online_backbone.compute_output_shape(input_shape)))
+        
+        self.target_backbone.build(input_shape)
+        self.target_projection.build(
+            self.target_backbone.compute_output_shape(input_shape))
 
         if self.classifier is not None:
             self.classifier.build(
-                self.online_network.compute_output_shape(input_shape)[0])
-        self.target_network.build(input_shape)
+                self.online_backbone.compute_output_shape(input_shape))
 
         self.built = True
 
     def call(self, x, training=False):
-
-        x, _, _ = self.online_network(x, training=training)
-
-        return x
+        return self.online_backbone(x, training=training)
 
     def compile(self, loss_fn, ft_optimizer=None, **kwargs):
         super(BYOL, self).compile(**kwargs)
@@ -206,13 +233,28 @@ class BYOL(tf.keras.Model):
         xi = x[..., :num_channels]
         xj = x[..., num_channels:]
 
-        _, _, zi = self.online_network(xi, training=training)
-        _, _, zj = self.online_network(xj, training=training)
-        _, pi = self.target_network(xi, training=training)
-        _, pj = self.target_network(xj, training=training)
+        zi = self.predictor(
+            self.online_projection(
+            self.online_backbone(xi, training),
+            training),
+            training)
 
-        loss = self.loss_fn(tf.stop_gradient(pi), zj)
-        loss += self.loss_fn(tf.stop_gradient(pj), zi)
+        zj = self.predictor(
+            self.online_projection(
+                self.online_backbone(xj, training),
+                training),
+                training)
+
+        pi = self.target_projection(
+            self.target_backbone(xi, training),
+            training)
+        
+        pj = self.target_projection(
+            self.target_backbone(xj, training),
+            training)
+
+        loss = self.loss_fn(pi, zj, self.distribute_strategy)
+        loss += self.loss_fn(pj, zi, self.distribute_strategy)
 
         return loss
 
@@ -239,7 +281,8 @@ class BYOL(tf.keras.Model):
 
         with tf.GradientTape() as tape:
             loss = self.shared_step(data, training=True)
-        trainable_variables = self.online_network.trainable_variables
+        trainable_variables = self.online_backbone.trainable_variables + \
+        self.online_projection.trainable_variables + self.predictor.trainable_variables
         grads = tape.gradient(loss, trainable_variables)
         self.optimizer.apply_gradients(zip(grads, trainable_variables))
 
@@ -272,31 +315,6 @@ class BYOL(tf.keras.Model):
             return {'similarity_loss': loss, **metric_results}
         else:
             return {'similarity_loss': loss}
-
-
-def build_online_network(backbone, hidden_dim, output_dim):
-
-    x = backbone.output
-    y = projection_head(
-        hidden_dim=hidden_dim,
-        output_dim=output_dim,
-        batch_norm_output=True)(x)
-    z = predictor_head(hidden_dim=hidden_dim, output_dim=output_dim)(y)
-
-    return tf.keras.Model(
-        inputs=backbone.input, outputs=[x, y, z], name='online_network')
-
-
-def build_target_network(backbone, hidden_dim, output_dim):
-
-    x = backbone.output
-    y = projection_head(
-        hidden_dim=hidden_dim,
-        output_dim=output_dim,
-        batch_norm_output=True)(x)
-
-    return tf.keras.Model(
-        inputs=backbone.input, outputs=[x, y], name='target_network')
 
 
 def main(argv):
@@ -401,58 +419,53 @@ def main(argv):
         else:
             classifier = None
 
-        online_network = build_online_network(
-            backbone, FLAGS.hidden_dim, FLAGS.output_dim)
-        backbone_2 = tf.keras.models.clone_model(backbone)
-        target_network = build_target_network(
-            backbone_2, FLAGS.hidden_dim, FLAGS.output_dim)
-
-        model = BYOL(
-            online_network=online_network,
-            target_network=target_network,
-            classifier=classifier
-        )
+        model = BYOL(backbone=backbone,
+                     projection=projection_head(
+                         hidden_dim=FLAGS.hidden_dim,
+                         output_dim=FLAGS.output_dim,
+                         num_layers=FLAGS.num_head_layers,
+                         batch_norm_output=False),
+                     predictor=predictor_head(
+                         hidden_dim=FLAGS.hidden_dim,
+                         output_dim=FLAGS.output_dim,
+                         num_layers=FLAGS.num_head_layers),
+                     classifier=classifier)
 
         # select optimizer
+        lr_schedule = WarmUpAndCosineDecay(
+                FLAGS.learning_rate, num_train_examples,
+                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
         if FLAGS.optimizer == 'lamb':
             optimizer = LAMB(
-                learning_rate=FLAGS.learning_rate,
-                weight_decay_rate=1e-04,
+                learning_rate=lr_schedule,
+                weight_decay_rate=1e-06,
                 exclude_from_weight_decay=['bias', 'BatchNormalization'])
         elif FLAGS.optimizer == 'adam':
-            optimizer = Adam(learning_rate=FLAGS.learning_rate)
+            optimizer = Adam(learning_rate=lr_schedule)
         elif FLAGS.optimizer == 'sgd':
-            lr_schedule = WarmUpAndCosineDecay(
-                FLAGS.learning_rate, num_train_examples,
-                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
-            optimizer = SGD(learning_rate=lr_schedule)
+            optimizer = SGD(learning_rate=lr_schedule, momentum=0.9)
         elif FLAGS.optimizer == 'adamw':
-            lr_schedule = WarmUpAndCosineDecay(
-                FLAGS.learning_rate, num_train_examples,
-                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
             optimizer = AdamW(
                 weight_decay=1e-06, learning_rate=lr_schedule)
+
+        ft_lr_schedule = WarmUpAndCosineDecay(
+                    FLAGS.ft_learning_rate, num_train_examples,
+                    FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
 
         if classifier is not None:
             if FLAGS.optimizer == 'lamb':
                 ft_optimizer = LAMB(
-                    learning_rate=FLAGS.ft_learning_rate,
-                    weight_decay_rate=1e-04,
+                    learning_rate=ft_lr_schedule,
+                    weight_decay_rate=1e-06,
                     exclude_from_weight_decay=['bias', 'BatchNormalization'])
             elif FLAGS.optimizer == 'adam':
-                ft_optimizer = Adam(learning_rate=FLAGS.ft_learning_rate)
+                ft_optimizer = Adam(learning_rate=ft_lr_schedule)
             elif FLAGS.optimizer == 'sgd':
-                lr_schedule = WarmUpAndCosineDecay(
-                    FLAGS.ft_learning_rate, num_train_examples,
-                    FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
                 ft_optimizer = SGD(
-                    learning_rate=lr_schedule, momentum=0.9, nesterov=True)
+                    learning_rate=ft_lr_schedule, momentum=0.9, nesterov=False)
             elif FLAGS.optimizer == 'adamw':
-                lr_schedule = WarmUpAndCosineDecay(
-                    FLAGS.ft_learning_rate, num_train_examples,
-                    FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
                 ft_optimizer = AdamW(
-                    weight_decay=1e-06, learning_rate=lr_schedule)
+                    weight_decay=1e-06, learning_rate=ft_lr_schedule)
 
             model.compile(
                 optimizer=optimizer,
@@ -463,6 +476,9 @@ def main(argv):
         else:
             model.compile(optimizer=optimizer,
                           loss_fn=byol_loss)
+        
+        # Build the model
+        model.build((None, *ds_shape))
 
     # Define checkpoints
     time = datetime.now().strftime("%Y%m%d-%H%M%S")
