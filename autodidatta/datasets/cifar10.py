@@ -10,9 +10,9 @@ AUTOTUNE = tf.data.AUTOTUNE
 def load_input_fn(is_training,
                   batch_size,
                   image_size,
-                  pre_train,
                   aug_fn,
                   aug_fn_2=None,
+                  pre_train=True,
                   drop_remainder=True,
                   proportion=1.0,
                   use_bfloat16=True):
@@ -22,9 +22,9 @@ def load_input_fn(is_training,
     is_training (bool): True for training split, False for validation split
     batch_size (int): The global batch size to use.
     image_size (int): The image size to use
-    pre_train (bool): True for pre-training, False for finetuning
     aug_fn (A.Augment, tf.keras.Sequential): Augmentation function
     aug_fn_2 (A.Augment, tf.keras.Sequential): Optional 2nd Augmentation function 
+    pre_train (bool): True for pre-training, False for finetuning
     drop_remainder (bool): Whether to drop the last batch if it has fewer than
     batch_size elements
     proportion (float): The proportion of training images to be used.

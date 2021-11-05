@@ -258,6 +258,57 @@ class ToGray(ImageOnlyOps):
             return inputs
 
 
+class GaussianBlur(ImageOnlyOps):
+    #TODO: Simply implementation of GaussianBlur
+    def __init__(self,
+                 kernel_size,
+                 sigma,
+                 padding='SAME',
+                 p=0.5,
+                 name=None,
+                 **kwargs):
+        
+        super(GaussianBlur, self).__init__(
+            p=p, seed=None, name=name, **kwargs
+        )
+
+        self.kernel_size = kernel_size
+        self.sigma = sigma
+        self.padding = padding
+        
+    def call(self, inputs, training=True):
+        image_dtype = inputs.dtype
+        if training:
+            radius = tf.cast(self.kernel_size / 2, dtype=tf.int32)
+            kernel_size = radius * 2 + 1
+            x = tf.cast(tf.range(-radius, radius + 1), dtype=tf.float32)
+            blur_filter = tf.exp(-tf.pow(x, 2.0) /
+                                (2.0 * tf.pow(tf.cast(self.sigma, dtype=tf.float32), 2.0)))
+            blur_filter /= tf.reduce_sum(blur_filter)
+
+            # One vertical and one horizontal filter.
+            blur_v = tf.reshape(blur_filter, [kernel_size, 1, 1, 1])
+            blur_h = tf.reshape(blur_filter, [1, kernel_size, 1, 1])
+            num_channels = tf.shape(inputs)[-1]
+            blur_h = tf.cast(tf.tile(blur_h, [1, 1, num_channels, 1]), image_dtype)
+            blur_v = tf.cast(tf.tile(blur_v, [1, 1, num_channels, 1]), image_dtype)
+            expand_batch_dim = inputs.shape.ndims == 3
+            if expand_batch_dim:
+                # Tensorflow requires batched input to convolutions, which we can fake with
+                # an extra dimension.
+                image = tf.expand_dims(inputs, axis=0)
+            blurred = tf.nn.depthwise_conv2d(
+                image, blur_h, strides=[1, 1, 1, 1], padding=self.padding)
+            blurred = tf.nn.depthwise_conv2d(
+                blurred, blur_v, strides=[1, 1, 1, 1], padding=self.padding)
+            if expand_batch_dim:
+                blurred = tf.squeeze(blurred, axis=0)
+            blurred = tf.cast(blurred, image_dtype)
+            return blurred
+        else:
+            return inputs
+
+
 class Normalize(ImageOnlyOps):
     def __init__(self,
                  mean=[0.4914, 0.4822, 0.4465],

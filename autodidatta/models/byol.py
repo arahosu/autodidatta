@@ -13,109 +13,28 @@ from tensorflow.keras.callbacks import CSVLogger
 
 import autodidatta.augment as A
 from autodidatta.datasets import cifar10, stl10
+from autodidatta.flags import dataset_flags, training_flags, utils_flags
+from autodidatta.models.base import BaseModel
 from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
 from autodidatta.models.networks.mlp import projection_head, predictor_head
 from autodidatta.utils.loss import byol_loss
 from autodidatta.utils.accelerator import setup_accelerator
-from autodidatta.utils.optimizers import WarmUpAndCosineDecay
 
-
-# Dataset and Augmentation
-flags.DEFINE_enum(
-    'dataset', 'cifar10',
-    ['cifar10', 'stl10', 'imagenet'],
-    'cifar10 (default), stl10, imagenet')
-flags.DEFINE_integer(
-    'image_size', 32,
-    'image size to be used')
-flags.DEFINE_float(
-    'brightness', 0.4,
-    'random brightness factor')
-flags.DEFINE_float(
-    'contrast', 0.4,
-    'random contrast factor')
-flags.DEFINE_float(
-    'saturation', 0.2,
-    'random saturation factor')
-flags.DEFINE_float(
-    'hue', 0.1,
-    'random hue factor')
-flags.DEFINE_list(
-    'prob_solarization', [0.0, 0.2],
-    'probability of applying solarization augmentation')
-
-# Training
-flags.DEFINE_integer(
-    'train_epochs', 1000, 'Number of epochs to train the model')
-flags.DEFINE_enum(
-    'optimizer', 'adamw', ['lamb', 'adam', 'sgd', 'adamw'],
-    'optimizer for pre-training')
+# byol flags
 flags.DEFINE_float(
     'init_tau', 0.99, 'initial tau parameter for target network update')
-flags.DEFINE_integer('batch_size', 512, 'set batch size for pre-training.')
-flags.DEFINE_float('learning_rate', 5e-04, 'set learning rate for optimizer.')
-flags.DEFINE_integer(
-    'warmup_epochs', 10,
-    'number of warmup epochs for learning rate scheduler')
-flags.DEFINE_integer(
-    'hidden_dim', 4096,
-    'set number of units in the hidden \
-     layers of the projection/predictor head')
-flags.DEFINE_integer(
-    'output_dim', 256,
-    'set number of units in the output layer of the projection/predictor head')
-flags.DEFINE_integer(
-    'num_head_layers', 1,
-    'set number of intermediate layers in the projection head')
-flags.DEFINE_bool(
-    'eval_linear', True,
-    'Set whether to run linear (Default) or non-linear evaluation protocol')
-flags.DEFINE_bool(
-    'train_projection', True,
-    'Set whether to train the projection head or not (Default)')
 
-# Finetuning
-flags.DEFINE_float(
-    'fraction_data',
-    1.0,
-    'fraction of training data to be used during downstream evaluation')
-flags.DEFINE_bool(
-    'online_ft',
-    True,
-    'set whether to enable online finetuning (True by default)')
-flags.DEFINE_float(
-    'ft_learning_rate', 1e-04, 'set learning rate for finetuning optimizer')
-
-# Model specification args
-flags.DEFINE_enum(
-    'backbone', 'resnet18',
-    ['resnet50', 'resnet34', 'resnet18'],
-    'resnet18 (default), resnet34, resnet50')
-
-# logging specification
-flags.DEFINE_bool(
-    'save_weights', True,
-    'Whether to save weights. If True, weights are saved in logdir')
-flags.DEFINE_bool(
-    'save_history', True,
-    'Whether to save the training history.'
-)
-flags.DEFINE_string(
-    'histdir', './training_logs',
-    'Directory for where the training history is being saved'
-)
-flags.DEFINE_string(
-    'logdir', './weights',
-    'Directory for where the weights are being saved')
-flags.DEFINE_string(
-    'weights', None,
-    'Directory for the trained model weights. Only used for finetuning')
-flags.DEFINE_bool(
-    'use_gpu', 'False', 'set whether to use GPU')
-flags.DEFINE_integer(
-    'num_cores', 8, 'set number of cores/workers for TPUs/GPUs')
-flags.DEFINE_string('tpu', 'local', 'set the name of TPU device')
-flags.DEFINE_bool('use_bfloat16', True, 'set whether to use mixed precision')
+# Redefine default value
+flags.FLAGS.set_default(
+    'saturation', 0.2)
+flags.FLAGS.set_default(
+    'solarization_prob', [0.0, 0.2])
+flags.FLAGS.set_default(
+    'pred_hidden_dim', 2048)
+flags.FLAGS.set_default(
+    'proj_hidden_dim', 2048)
+flags.FLAGS.set_default(
+    'output_dim', 256)
 
 FLAGS = flags.FLAGS
 
@@ -126,7 +45,7 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
                  max_steps,
                  init_tau=0.99,
                  final_tau=1.0,
-                 update_projection=False):
+                 train_projector=False):
         super(BYOLMAWeightUpdate, self).__init__()
 
         assert abs(init_tau) <= 1.
@@ -137,7 +56,7 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
         self.current_tau = init_tau
         self.final_tau = final_tau
         self.global_step = 0
-        self.update_projection = update_projection
+        self.train_projector = train_projector
 
     def on_train_batch_end(self, batch, logs=None):
         self.update_weights()
@@ -151,7 +70,7 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
     @tf.function
     def update_weights(self):
         for online_layer, target_layer in zip(
-            self.model.online_backbone.layers,
+            self.model.backbone.layers,
             self.model.target_backbone.layers):
             if hasattr(target_layer, 'kernel'):
                 target_layer.kernel.assign(self.current_tau * target_layer.kernel 
@@ -160,10 +79,10 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
                 target_layer.bias.assign(self.current_tau * target_layer.bias 
                                          + (1 - self.current_tau) * online_layer.bias)
 
-        if self.update_projection:
+        if self.train_projector:
             for online_layer, target_layer in zip(
-                self.model.online_projection.layers,
-                self.model.target_projection.layers):
+                self.model.projector.layers,
+                self.model.target_projector.layers):
                 if hasattr(target_layer, 'kernel'):
                     target_layer.kernel.assign(self.current_tau * 
                     target_layer.kernel + (1 - self.current_tau) * 
@@ -175,33 +94,32 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
                         online_layer.bias)
 
 
-class BYOL(tf.keras.Model):
+class BYOL(BaseModel):
 
     def __init__(self,
                  backbone,
-                 projection,
+                 projector,
                  predictor,
                  classifier=None):
 
-        super(BYOL, self).__init__()
-
-        self.online_backbone = backbone
-        self.online_projection = projection
-        self.predictor = predictor
+        super(BYOL, self).__init__(
+            backbone=backbone,
+            projector=projector,
+            predictor=predictor,
+            classifier=classifier
+        )
 
         self.target_backbone = tf.keras.models.clone_model(backbone)
-        self.target_projection = tf.keras.models.clone_model(projection)
-
-        self.classifier = classifier
+        self.target_projection = tf.keras.models.clone_model(projector)
 
     def build(self, input_shape):
 
-        self.online_backbone.build(input_shape)
-        self.online_projection.build(
-            self.online_backbone.compute_output_shape(input_shape))
+        self.backbone.build(input_shape)
+        self.projector.build(
+            self.backbone.compute_output_shape(input_shape))
         self.predictor.build(
-            self.online_projection.compute_output_shape(
-                self.online_backbone.compute_output_shape(input_shape)))
+            self.projector.compute_output_shape(
+                self.backbone.compute_output_shape(input_shape)))
         
         self.target_backbone.build(input_shape)
         self.target_projection.build(
@@ -209,21 +127,9 @@ class BYOL(tf.keras.Model):
 
         if self.classifier is not None:
             self.classifier.build(
-                self.online_backbone.compute_output_shape(input_shape))
+                self.backbone.compute_output_shape(input_shape))
 
         self.built = True
-
-    def call(self, x, training=False):
-        return self.online_backbone(x, training=training)
-
-    def compile(self, loss_fn, ft_optimizer=None, **kwargs):
-        super(BYOL, self).compile(**kwargs)
-        self.loss_fn = loss_fn
-        if self.classifier is not None:
-            assert ft_optimizer is not None, \
-                'ft_optimizer should not be None if self.classifier is not \
-                    None'
-            self.ft_optimizer = ft_optimizer
 
     def shared_step(self, data, training):
         if isinstance(data, tuple):
@@ -236,14 +142,14 @@ class BYOL(tf.keras.Model):
         xj = x[..., num_channels:]
 
         zi = self.predictor(
-            self.online_projection(
-            self.online_backbone(xi, training),
+            self.projector(
+            self.backbone(xi, training),
             training),
             training)
 
         zj = self.predictor(
-            self.online_projection(
-                self.online_backbone(xj, training),
+            self.projector(
+                self.backbone(xj, training),
                 training),
                 training)
 
@@ -260,226 +166,119 @@ class BYOL(tf.keras.Model):
 
         return loss
 
-    def finetune_step(self, data):
-        x, y = data
-        num_channels = int(x.shape[-1] // 2)
-        view = x[..., :num_channels]
-
-        if len(y.shape) > 2:
-            num_classes = int(y.shape[-1] // 2)
-            y = y[..., :num_classes]
-
-        with tf.GradientTape() as tape:
-            features = self(view, training=True)
-            y_pred = self.classifier(features, training=True)
-            loss = self.compiled_loss(
-                y, y_pred, regularization_losses=self.losses)
-        trainable_variables = self.classifier.trainable_variables
-        grads = tape.gradient(loss, trainable_variables)
-        self.ft_optimizer.apply_gradients(zip(grads, trainable_variables))
-        self.compiled_metrics.update_state(y, y_pred)
-
-    def train_step(self, data):
-
-        with tf.GradientTape() as tape:
-            loss = self.shared_step(data, training=True)
-        trainable_variables = self.online_backbone.trainable_variables + \
-        self.online_projection.trainable_variables + self.predictor.trainable_variables
-        grads = tape.gradient(loss, trainable_variables)
-        self.optimizer.apply_gradients(zip(grads, trainable_variables))
-
-        if self.classifier is not None:
-            self.finetune_step(data)
-            metrics_results = {m.name: m.result() for m in self.metrics}
-            results = {'similarity_loss': loss, **metrics_results}
-        else:
-            results = {'similarity_loss': loss}
-
-        return results
-
-    def test_step(self, data):
-        x, y = data
-        num_channels = int(x.shape[-1] // 2)
-        view = x[..., :num_channels]
-
-        if len(y.shape) > 2:
-            num_classes = int(y.shape[-1] // 2)
-            y = y[..., :num_classes]
-        loss = self.shared_step(data, training=False)
-
-        if self.classifier is not None:
-            features = self(view, training=False)
-            y_pred = self.classifier(features, training=False)
-            _ = self.compiled_loss(
-                y, y_pred, regularization_losses=self.losses)
-            self.compiled_metrics.update_state(y, y_pred)
-            metric_results = {m.name: m.result() for m in self.metrics}
-            return {'similarity_loss': loss, **metric_results}
-        else:
-            return {'similarity_loss': loss}
-
 
 def main(argv):
 
     del argv
 
+    # Choose accelerator 
     strategy = setup_accelerator(
         FLAGS.use_gpu, FLAGS.num_cores, FLAGS.tpu)
-
+    
+    # Choose whether to train with float32 or bfloat16 precision
     if FLAGS.use_bfloat16:
         tf.keras.mixed_precision.set_global_policy('mixed_bfloat16')
 
-    # Define augmentation functions
-    aug_fn_1 = A.Augment([
-        A.layers.RandomResizedCrop(
-            FLAGS.image_size, FLAGS.image_size),
-        A.layers.HorizontalFlip(),
-        A.layers.ColorJitter(
-            FLAGS.brightness,
-            FLAGS.contrast, 
-            FLAGS.saturation,
-            FLAGS.hue, p=0.8),
-        A.layers.ToGray(p=0.2),
-        A.layers.Solarize(p=FLAGS.prob_solarization[0])
-        ])
-        
-    aug_fn_2 = A.Augment([
-        A.layers.RandomResizedCrop(
-            FLAGS.image_size, FLAGS.image_size),
-        A.layers.HorizontalFlip(),
-        A.layers.ColorJitter(
-            FLAGS.brightness,
-            FLAGS.contrast, 
-            FLAGS.saturation,
-            FLAGS.hue, p=0.8),
-        A.layers.ToGray(p=0.2),
-        A.layers.Solarize(p=FLAGS.prob_solarization[1])
-        ])
-
-    # Define image dimension
-    ds_shape = (FLAGS.image_size, FLAGS.image_size, 3)
-
+    # Select dataset
+    ds_info = tfds.builder(FLAGS.dataset).info
     if FLAGS.dataset == 'cifar10':
         load_dataset = cifar10.load_input_fn
+        image_size = 32
+        train_split = 'train'
+        validation_split = 'test'
     elif FLAGS.dataset == 'stl10':
         load_dataset = stl10.load_input_fn
+        image_size = 96
+        train_split = 'unlabelled'
+        validation_split = 'test'
+    else:
+        raise NotImplementedError("other datasets have not yet been implmented")
+    
+    num_train_examples = ds_info.splits[train_split].num_examples
+    num_val_examples = ds_info.splits[validation_split].num_examples
+    steps_per_epoch = num_train_examples // FLAGS.batch_size
+    validation_steps = num_val_examples // FLAGS.batch_size
+    ds_shape = (image_size, image_size, 3)
 
+    # Define augmentation functions
+    augment_kwargs = dataset_flags.parse_augmentation_flags()
+
+    aug_fn_1 = A.SSLAugment(image_size=image_size,
+                            gaussian_prob=FLAGS.gaussian_prob[0],
+                            solarization_prob=FLAGS.solarization_prob[0],
+                            **augment_kwargs)    
+    aug_fn_2 = A.SSLAugment(image_size=image_size,
+                            gaussian_prob=FLAGS.gaussian_prob[1],
+                            solarization_prob=FLAGS.solarization_prob[1],
+                            **augment_kwargs)  
+
+    # Define train-validation split
     train_ds = load_dataset(
         is_training=True,
         batch_size=FLAGS.batch_size,
-        image_size=FLAGS.image_size,
-        pre_train=True,
+        image_size=image_size,
         aug_fn=aug_fn_1,
         aug_fn_2=aug_fn_2,
         use_bfloat16=FLAGS.use_bfloat16)
     validation_ds = load_dataset(
         is_training=False,
         batch_size=FLAGS.batch_size,
-        image_size=FLAGS.image_size,
-        pre_train=True,
+        image_size=image_size,
         aug_fn=aug_fn_1,
         aug_fn_2=aug_fn_2,
         use_bfloat16=FLAGS.use_bfloat16)
 
-    ds_info = tfds.builder(FLAGS.dataset).info
-    num_train_examples = ds_info.splits['train'].num_examples
-    num_val_examples = ds_info.splits['test'].num_examples
-    steps_per_epoch = num_train_examples // FLAGS.batch_size
-    validation_steps = num_val_examples // FLAGS.batch_size
-
     with strategy.scope():
-        # load model
+        # Define backbone
         if FLAGS.backbone == 'resnet50':
             backbone = ResNet50(input_shape=ds_shape)
         elif FLAGS.backbone == 'resnet34':
             backbone = ResNet34(input_shape=ds_shape)
         elif FLAGS.backbone == 'resnet18':
             backbone = ResNet18(input_shape=ds_shape)
+        else:
+            raise NotImplementedError("other backbones have not yet been implemented")
 
         # If online finetuning is enabled
         if FLAGS.online_ft:
             assert FLAGS.dataset != 'stl10', \
                 'Online finetuning is not supported for stl10'
 
-            # load model for downstream task evaluation
-            if FLAGS.eval_linear:
-                classifier = tf.keras.Sequential(
-                    [tfkl.Flatten(),
-                     tfkl.Dense(10, activation='softmax')],
-                    name='classifier')
-            else:
-                classifier = tf.keras.Sequential(
-                    [tfkl.Flatten(),
-                     tfkl.Dense(512, use_bias=False),
-                     tfkl.BatchNormalization(),
-                     tfkl.ReLU(),
-                     tfkl.Dense(10, activation='softmax')],
-                    name='classifier')
+            # load classifier for downstream task evaluation
+            classifier = training_flags.load_classifier()
 
-            loss = tf.keras.losses.sparse_categorical_crossentropy
+            finetune_loss = tf.keras.losses.sparse_categorical_crossentropy
             metrics = ['acc']
         else:
             classifier = None
 
         model = BYOL(backbone=backbone,
-                     projection=projection_head(
-                         hidden_dim=FLAGS.hidden_dim,
-                         output_dim=FLAGS.output_dim,
-                         num_layers=FLAGS.num_head_layers,
-                         batch_norm_output=False),
-                     predictor=predictor_head(
-                         hidden_dim=FLAGS.hidden_dim,
-                         output_dim=FLAGS.output_dim,
-                         num_layers=FLAGS.num_head_layers),
-                     classifier=classifier)
+                        projector=projection_head(
+                            hidden_dim=FLAGS.proj_hidden_dim,
+                            output_dim=FLAGS.output_dim,
+                            num_layers=FLAGS.num_head_layers,
+                            batch_norm_output=False),
+                        predictor=predictor_head(
+                            hidden_dim=FLAGS.pred_hidden_dim,
+                            output_dim=FLAGS.output_dim,
+                            num_layers=FLAGS.num_head_layers),
+                        classifier=classifier)
 
-        # select optimizer
-        lr_schedule = WarmUpAndCosineDecay(
-                FLAGS.learning_rate, num_train_examples,
-                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+        # load_optimizer
+        optimizer, ft_optimizer = training_flags.load_optimizer(num_train_examples)
 
-        if FLAGS.optimizer == 'lamb':
-            optimizer = LAMB(
-                learning_rate=lr_schedule,
-                weight_decay_rate=1e-06,
-                exclude_from_weight_decay=['bias', 'BatchNormalization'])
-        elif FLAGS.optimizer == 'adam':
-            optimizer = Adam(learning_rate=lr_schedule)
-        elif FLAGS.optimizer == 'sgd':
-            optimizer = SGD(learning_rate=lr_schedule, momentum=0.9)
-        elif FLAGS.optimizer == 'adamw':
-            optimizer = AdamW(
-                weight_decay=1e-06, learning_rate=lr_schedule)
-
-        ft_lr_schedule = WarmUpAndCosineDecay(
-                    FLAGS.ft_learning_rate, num_train_examples,
-                    FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
-
-        if classifier is not None:
-            if FLAGS.optimizer == 'lamb':
-                ft_optimizer = LAMB(
-                    learning_rate=ft_lr_schedule,
-                    weight_decay_rate=1e-06,
-                    exclude_from_weight_decay=['bias', 'BatchNormalization'])
-            elif FLAGS.optimizer == 'adam':
-                ft_optimizer = Adam(learning_rate=ft_lr_schedule)
-            elif FLAGS.optimizer == 'sgd':
-                ft_optimizer = SGD(
-                    learning_rate=ft_lr_schedule, momentum=0.9, nesterov=False)
-            elif FLAGS.optimizer == 'adamw':
-                ft_optimizer = AdamW(
-                    weight_decay=1e-06, learning_rate=ft_lr_schedule)
-
+        if FLAGS.online_ft:
             model.compile(
                 optimizer=optimizer,
                 loss_fn=byol_loss,
                 ft_optimizer=ft_optimizer,
-                loss=loss,
+                loss=finetune_loss,
                 metrics=metrics)
         else:
-            model.compile(optimizer=optimizer,
-                          loss_fn=byol_loss)
-        
+            model.compile(
+                optimizer=optimizer,
+                loss_fn=byol_loss)
+
         # Build the model
         model.build((None, *ds_shape))
 
@@ -490,7 +289,7 @@ def main(argv):
     movingavg_cb = BYOLMAWeightUpdate(
         max_steps=steps_per_epoch*FLAGS.train_epochs,
         init_tau=FLAGS.init_tau,
-        update_projection=FLAGS.train_projection)
+        train_projector=FLAGS.train_projector)
     cb = [movingavg_cb]
 
     if FLAGS.save_weights:
