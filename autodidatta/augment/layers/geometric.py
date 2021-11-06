@@ -8,7 +8,7 @@ class RandomZoom(DualOps):
     # TODO: Implement RandomZoom without importing RandomZoom
     def __init__(self,
                  height_factor,
-                 width_factor,
+                 width_factor=None,
                  fill_mode='reflect',
                  interpolation='bilinear',
                  p=1.0,
@@ -20,7 +20,7 @@ class RandomZoom(DualOps):
             p=p, seed=seed, name=name, **kwargs
         )
 
-        self.op = tfkl.RandomZoom(
+        self.op = tfkl.experimental.preprocessing.RandomZoom(
             height_factor, width_factor, fill_mode,
             interpolation, seed, fill_value=fill_value
         )
@@ -44,7 +44,7 @@ class RandomRotate(DualOps):
             p=p, seed=seed, name=name, **kwargs
         )
 
-        self.op = tfkl.RandomRotation(
+        self.op = tfkl.experimental.preprocessing.RandomRotation(
             factor, fill_mode, interpolation,
             seed, fill_value=fill_value
         )
@@ -75,37 +75,44 @@ class RandomResizedCrop(DualOps):
         self.ratio = ratio
         self.interpolation = interpolation
 
+    def _op(self, inputs):
+        image_dtype = inputs.dtype
+        bbox = tf.constant(
+            [0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])
+        aspect_ratio = self.height / self.width
+        ratio = tuple([aspect_ratio*x for x in self.ratio])
+
+        distorted_bb = sample_distorted_bounding_box(
+            image_size=inputs.shape,
+            bounding_boxes=bbox,
+            min_object_covered=0.1,
+            aspect_ratio_range=ratio,
+            area_range=self.scale,
+            max_attempts=100,
+            use_image_if_no_bounding_boxes=True)
+
+        bbox_start, bbox_size, _ = distorted_bb
+
+        offset_y, offset_x, _ = tf.unstack(bbox_start)
+        target_height, target_width, _ = tf.unstack(bbox_size)
+        image = tf.image.crop_to_bounding_box(
+            inputs, offset_y, offset_x, target_height, target_width)
+
+        image = tf.image.resize(
+            image, [self.height, self.width], self.interpolation)
+        
+        image = tf.cast(image, image_dtype)
+
+        return image
+
     def call(self, inputs, training=True):
         image_dtype = inputs.dtype
         if training:
-            bbox = tf.constant(
-                [0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])
-            aspect_ratio = self.height / self.width
-            ratio = tuple([aspect_ratio*x for x in self.ratio])
-
-            distorted_bb = sample_distorted_bounding_box(
-                image_size=inputs.shape,
-                bounding_boxes=bbox,
-                min_object_covered=0.1,
-                aspect_ratio_range=ratio,
-                area_range=self.scale,
-                max_attempts=100,
-                use_image_if_no_bounding_boxes=True)
-
-            bbox_start, bbox_size, _ = distorted_bb
-
-            offset_y, offset_x, _ = tf.unstack(bbox_start)
-            target_height, target_width, _ = tf.unstack(bbox_size)
-            image = tf.image.crop_to_bounding_box(
-                inputs, offset_y, offset_x, target_height, target_width)
-
-            image = tf.image.resize(
-                image, [self.height, self.width], self.interpolation)
-            
-            image = tf.cast(image, image_dtype)
-
-            image = tf.cast(image, image_dtype)
-
+            if inputs.shape.ndims == 3:
+                image = self._op(inputs)
+            elif inputs.shape.ndims == 4:
+                image = tf.map_fn(
+                    self._op, inputs)
             return image
         else:
             return inputs

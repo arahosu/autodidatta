@@ -251,7 +251,10 @@ class ToGray(ImageOnlyOps):
         image_dtype = inputs.dtype
         if training:
             image = tf.image.rgb_to_grayscale(inputs)
-            image = tf.tile(image, [1, 1, 3])
+            if image.shape.ndims == 3:
+                image = tf.tile(image, [1, 1, 3])
+            elif image.shape.ndims == 4:
+                image = tf.tile(image, [1, 1, 1, 3])
             image = tf.cast(image, image_dtype)
             return image
         else:

@@ -31,7 +31,6 @@ def setup_accelerator(use_gpu, num_cores, device_name=None):
         print('Use TPU at {}'.format(device_name))
         resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
             tpu=device_name)
-        # resolver = LocalTPUClusterResolver()
         tf.config.experimental_connect_to_cluster(resolver)
         tf.tpu.experimental.initialize_tpu_system(resolver)
         strategy = tf.distribute.TPUStrategy(resolver)
