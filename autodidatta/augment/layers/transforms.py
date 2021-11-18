@@ -326,6 +326,7 @@ class Normalize(BaseOps):
         self.rescale = rescale
 
     def apply(self, inputs, training=None):
+        inputs = tf.cast(inputs, tf.float32)
         if self.rescale:
             inputs /= 255.
         # The function is always called by default

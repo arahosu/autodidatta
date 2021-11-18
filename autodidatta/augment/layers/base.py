@@ -27,8 +27,6 @@ class BaseOps(Layer):
         self.always_apply = always_apply
 
     def call(self, inputs, training=True):
-        if self.always_apply:
-            training=True
         if inputs.shape.ndims == 3:
             outputs = self.apply_fn(inputs, training)
         elif image.shape.ndims == 4:
@@ -41,10 +39,12 @@ class BaseOps(Layer):
         
     def apply_fn(self, image, training=True):
         cond = tf.less(tf.random.uniform([], seed=self.seed), self.p)
-        outputs = tf.cond(
-            cond,
-            lambda: self.apply(image, training=training),
-            lambda: image
-        )
-
+        if not self.always_apply:
+            outputs = tf.cond(
+                cond,
+                lambda: self.apply(image, training=training),
+                lambda: image
+            )
+        else:
+            outputs = self.apply(image, training=True)
         return outputs
