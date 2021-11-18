@@ -5,6 +5,7 @@
 *.txt
 *.tfrecords
 *.ipynb
+*.sh
 
 # Python cache
 **/__pycache__
@@ -12,3 +13,6 @@
 *.cpython-37.pyc
 
 training_logs/
+scripts/
+weights/
+.ipynb_checkpoints/

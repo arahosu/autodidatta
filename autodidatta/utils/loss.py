@@ -109,6 +109,9 @@ def nt_xent_loss_v2(hidden1,
         labels = tf.one_hot(tf.range(batch_size), batch_size * 2)
         masks = tf.one_hot(tf.range(batch_size), batch_size)
 
+    labels = tf.cast(labels, hidden1.dtype)
+    masks = tf.cast(masks, hidden1.dtype)
+
     logits_aa = tf.matmul(
         hidden1, hidden1_large, transpose_b=True) / temperature
     logits_aa = logits_aa - masks * LARGE_NUM
@@ -132,9 +135,17 @@ def nt_xent_loss_v2(hidden1,
 
 
 def byol_loss(hidden1,
-              hidden2):
+              hidden2,
+              strategy=None):
 
-    return 2 - 2*tf.keras.losses.cosine_similarity(hidden1, hidden2)
+    hidden1 = tf.math.l2_normalize(hidden1, axis=-1)
+    hidden2 = tf.math.l2_normalize(hidden2, axis=-1)
+
+    loss = 2 - 2 * tf.math.reduce_mean(tf.math.reduce_sum(hidden1 * hidden2, axis=-1))
+
+    loss /= strategy.num_replicas_in_sync
+
+    return loss
 
 
 def barlow_twins_loss(hidden1,
@@ -142,13 +153,14 @@ def barlow_twins_loss(hidden1,
                       lambda_,
                       loss_temperature=0.025,
                       strategy=None):
+    dtype = hidden1.dtype
 
     if strategy is not None:
         hidden1 = tpu_cross_replica_concat(hidden1, strategy=strategy)
         hidden2 = tpu_cross_replica_concat(hidden2, strategy=strategy)
 
     N, D = hidden1.shape[0], hidden2.shape[1]
-    N = tf.cast(N, tf.float32)
+    N = tf.cast(N, dtype)
 
     # normalize repr. along the batch dimension
     zi_norm = (hidden1 - tf.reduce_mean(hidden1, axis=0)) / \

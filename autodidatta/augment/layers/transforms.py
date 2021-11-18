@@ -1,8 +1,8 @@
 import tensorflow as tf
-from autodidatta.augment.layers.base import ImageOnlyOps
+from autodidatta.augment.layers.base import BaseOps
 
 
-class RandomBrightness(ImageOnlyOps):
+class RandomBrightness(BaseOps):
     def __init__(self,
                  factor,
                  p=1.0,
@@ -26,7 +26,7 @@ class RandomBrightness(ImageOnlyOps):
 
         self.seed = seed
 
-    def call(self, inputs, training=True):
+    def apply(self, inputs, training=True):
         delta = tf.random.uniform(
             [], self.lower, self.upper, seed=self.seed)
         if training:
@@ -35,7 +35,7 @@ class RandomBrightness(ImageOnlyOps):
             return inputs
 
 
-class RandomContrast(ImageOnlyOps):
+class RandomContrast(BaseOps):
 
     def __init__(self,
                  factor,
@@ -57,7 +57,7 @@ class RandomContrast(ImageOnlyOps):
 
         self.seed = seed
 
-    def call(self, inputs, training=True):
+    def apply(self, inputs, training=True):
         if training:
             return tf.image.random_contrast(
                 inputs, self.lower, self.upper, self.seed
@@ -66,7 +66,7 @@ class RandomContrast(ImageOnlyOps):
             return inputs
 
 
-class RandomGamma(ImageOnlyOps):
+class RandomGamma(BaseOps):
 
     def __init__(self,
                  gamma,
@@ -98,7 +98,7 @@ class RandomGamma(ImageOnlyOps):
 
         self.seed = seed
 
-    def call(self, inputs, training=True):
+    def apply(self, inputs, training=True):
 
         random_gamma = tf.random.uniform(
             [], self.lower_gamma, self.upper_gamma, seed=self.seed)
@@ -113,7 +113,7 @@ class RandomGamma(ImageOnlyOps):
             return inputs
 
 
-class RandomSaturation(ImageOnlyOps):
+class RandomSaturation(BaseOps):
 
     def __init__(self,
                  factor,
@@ -134,7 +134,7 @@ class RandomSaturation(ImageOnlyOps):
 
         self.seed = seed
 
-    def call(self, inputs, training=True):
+    def apply(self, inputs, training=True):
         if training:
             return tf.image.random_saturation(
                 inputs, self.lower, self.upper, seed=self.seed
@@ -143,7 +143,7 @@ class RandomSaturation(ImageOnlyOps):
             return inputs
 
 
-class RandomHue(ImageOnlyOps):
+class RandomHue(BaseOps):
 
     def __init__(self,
                  factor,
@@ -158,7 +158,7 @@ class RandomHue(ImageOnlyOps):
         self.factor = factor
         self.seed = seed
 
-    def call(self, inputs, training=True):
+    def apply(self, inputs, training=True):
         if training:
             return tf.image.random_hue(
                 inputs, self.factor, seed=self.seed
@@ -167,14 +167,14 @@ class RandomHue(ImageOnlyOps):
             return inputs
 
 
-class ColorJitter(ImageOnlyOps):
+class ColorJitter(BaseOps):
 
     def __init__(self,
                  brightness,
                  contrast,
                  saturation,
                  hue,
-                 clip_value=True,
+                 clip_value=False,
                  random_order=True,
                  p=0.8,
                  seed=None,
@@ -193,34 +193,36 @@ class ColorJitter(ImageOnlyOps):
         self.random_order = random_order
         self.seed = seed
 
-    def call(self, inputs, training=True):
+    def apply(self, inputs, training=True):
+        image_dtype = inputs.dtype
         perm = tf.random.shuffle(tf.range(4))
         for i in range(4):
             idx = perm[i] if self.random_order else i
             inputs = self.apply_transform(
                 inputs, idx, training=training)
             if self.clip_value:
-                inputs = tf.clip_by_value(inputs, 0., 1.)
+                inputs = tf.clip_by_value(inputs, 0, 1)
+        inputs = tf.cast(inputs, image_dtype)
         return inputs
 
     def apply_transform(self, inputs, i, training=True):
 
         if i == 0:
-            inputs = self.brightness_op(inputs, training=training)
+            inputs = self.brightness_op.apply(inputs, training=training)
         elif i == 1:
-            inputs = self.contrast_op(inputs, training=training)
+            inputs = self.contrast_op.apply(inputs, training=training)
         elif i == 2:
-            inputs = self.saturation_op(inputs, training=training)
+            inputs = self.saturation_op.apply(inputs, training=training)
         elif i == 3:
-            inputs = self.hue_op(inputs, training=training)
+            inputs = self.hue_op.apply(inputs, training=training)
 
         return inputs
 
 
-class Solarize(ImageOnlyOps):
+class Solarize(BaseOps):
 
     def __init__(self,
-                 threshold=0.5,
+                 threshold=127,
                  p=0.2,
                  seed=None,
                  name=None,
@@ -232,28 +234,83 @@ class Solarize(ImageOnlyOps):
         self.threshold = threshold
         self.seed = seed
 
-    def call(self, inputs, training=True):
+    def apply(self, inputs, training=True):
         if training:
-            return tf.where(inputs < threshold, image, 1. - image)
+            return tf.where(inputs < self.threshold, inputs, 255 - inputs)
         else:
             return inputs
 
-class ToGray(ImageOnlyOps):
+
+class ToGray(BaseOps):
     def __init__(self, p=0.2, name=None, **kwargs):
         super(ToGray, self).__init__(
             p=p, seed=None, name=name, **kwargs
         )
 
-    def call(self, inputs, training=True):
+    def apply(self, inputs, training=True):
+        image_dtype = inputs.dtype
         if training:
             image = tf.image.rgb_to_grayscale(inputs)
             image = tf.tile(image, [1, 1, 3])
+            image = tf.cast(image, image_dtype)
             return image
         else:
             return inputs
 
 
-class Normalize(ImageOnlyOps):
+class GaussianBlur(BaseOps):
+    #TODO: Simpler implementation of GaussianBlur
+    def __init__(self,
+                 kernel_size,
+                 sigma,
+                 padding='SAME',
+                 p=0.5,
+                 name=None,
+                 **kwargs):
+        
+        super(GaussianBlur, self).__init__(
+            p=p, seed=None, name=name, **kwargs
+        )
+
+        self.kernel_size = kernel_size
+        self.sigma = sigma
+        self.padding = padding
+        
+    def apply(self, inputs, training=True):
+        image_dtype = inputs.dtype
+        if training:
+            inputs = tf.cast(inputs, tf.float32)
+            radius = tf.cast(self.kernel_size / 2, dtype=tf.int32)
+            kernel_size = radius * 2 + 1
+            x = tf.cast(tf.range(-radius, radius + 1), dtype=tf.float32)
+            blur_filter = tf.exp(-tf.pow(x, 2.0) /
+                                (2.0 * tf.pow(tf.cast(self.sigma, dtype=tf.float32), 2.0)))
+            blur_filter /= tf.reduce_sum(blur_filter)
+
+            # One vertical and one horizontal filter.
+            blur_v = tf.reshape(blur_filter, [kernel_size, 1, 1, 1])
+            blur_h = tf.reshape(blur_filter, [1, kernel_size, 1, 1])
+            num_channels = tf.shape(inputs)[-1]
+            blur_h = tf.cast(tf.tile(blur_h, [1, 1, num_channels, 1]), tf.float32)
+            blur_v = tf.cast(tf.tile(blur_v, [1, 1, num_channels, 1]), tf.float32)
+            expand_batch_dim = inputs.shape.ndims == 3
+            if expand_batch_dim:
+                # Tensorflow requires batched input to convolutions, which we can fake with
+                # an extra dimension.
+                image = tf.expand_dims(inputs, axis=0)
+            blurred = tf.nn.depthwise_conv2d(
+                image, blur_h, strides=[1, 1, 1, 1], padding=self.padding)
+            blurred = tf.nn.depthwise_conv2d(
+                blurred, blur_v, strides=[1, 1, 1, 1], padding=self.padding)
+            if expand_batch_dim:
+                blurred = tf.squeeze(blurred, axis=0)
+            blurred = tf.cast(blurred, image_dtype)
+            return blurred
+        else:
+            return inputs
+
+
+class Normalize(BaseOps):
     def __init__(self,
                  mean=[0.4914, 0.4822, 0.4465],
                  std=[0.247, 0.243, 0.261],
@@ -261,14 +318,15 @@ class Normalize(ImageOnlyOps):
                  name=None,
                  **kwargs):
         super(Normalize, self).__init__(
-            p=1.0, seed=None, name=name, **kwargs
+            p=1.0, always_apply=True, seed=None, name=name, **kwargs
         )
 
         self.mean = mean
         self.std = std
         self.rescale = rescale
 
-    def call(self, inputs, training=None):
+    def apply(self, inputs, training=None):
+        inputs = tf.cast(inputs, tf.float32)
         if self.rescale:
             inputs /= 255.
         # The function is always called by default

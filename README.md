@@ -8,3 +8,14 @@ ADD implements some of the most popular self-supervised learning methods, includ
 - [SimSiam](https://arxiv.org/pdf/2011.10566.pdf)
 - [Barlow Twins](https://arxiv.org/pdf/2103.03230.pdf)
 - [BYOL](https://arxiv.org/pdf/2006.07733.pdf)
+
+## Results
+
+### CIFAR10
+
+| Method       | Backbone | FT (1%) | FT (10%) | FT (100%) | Linear Eval (online) |
+|--------------|----------|---------|----------|-----------|----------------------|
+| Barlow Twins | ResNet18 |         |          |           | 90.22                |
+| BYOL         | ResNet18 |         |          |           | 87.76                |
+| SimCLR       | ResNet18 |         |          |           | 91.06                |
+| SimSiam      | ResNet18 |         |          |           | 90.18                |

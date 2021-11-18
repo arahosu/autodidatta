@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+from autodidatta.utils.loss import tpu_cross_replica_concat
 
 def tversky_loss(y_true,
                  y_pred,
@@ -29,3 +29,32 @@ def tversky_loss(y_true,
     answer = (truepos + smooth) / ((truepos + smooth) + fp_and_fn)
 
     return tf.cast(1 - answer, tf.float32)
+
+
+def invariance_variance_loss(hidden1, hidden2, mu, nu, strategy=None):
+
+    if strategy is not None:
+        hidden1 = tpu_cross_replica_concat(hidden1, strategy)
+        hidden2 = tpu_cross_replica_concat(hidden2, strategy)
+
+    # invariance loss
+    MSE_loss = tf.keras.losses.MeanSquaredError(
+        reduction=tf.keras.losses.Reduction.NONE)
+    sim_loss = MSE_loss(hidden1, hidden2)
+
+    # variance loss
+    std_hidden1 = tf.math.sqrt(tf.math.reduce_variance(hidden1, axis=0) + 1e-04)
+    std_hidden2 = tf.math.sqrt(tf.math.reduce_variance(hidden2, axis=0) + 1e-04)
+    hidden_std = (std_hidden1 + std_hidden2) / 2
+
+    std_loss = tf.math.reduce_mean(tf.nn.relu(1 - std_hidden1)) + \
+        tf.math.reduce_mean(tf.nn.relu(1 - std_hidden2))
+
+    # total loss
+    loss = mu * sim_loss + nu * std_loss
+    loss /= strategy.num_replicas_in_sync
+
+    return loss
+
+    
+        

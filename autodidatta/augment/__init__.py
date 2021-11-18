@@ -1,2 +1,2 @@
-from autodidatta.augment.sequential import Augment # noqa
+from autodidatta.augment.sequential import SSLAugment # noqa
 from autodidatta.augment import layers # noqa
