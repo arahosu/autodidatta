@@ -1,59 +1,10 @@
-from autodidatta.augment.layers.base import DualOps
+from autodidatta.augment.layers.base import BaseOps
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 from tensorflow.image import sample_distorted_bounding_box
 
 
-class RandomZoom(DualOps):
-    # TODO: Implement RandomZoom without importing RandomZoom
-    def __init__(self,
-                 height_factor,
-                 width_factor=None,
-                 fill_mode='reflect',
-                 interpolation='bilinear',
-                 p=1.0,
-                 seed=None,
-                 name=None,
-                 fill_value=0.0,
-                 **kwargs):
-        super(RandomZoom, self).__init__(
-            p=p, seed=seed, name=name, **kwargs
-        )
-
-        self.op = tfkl.experimental.preprocessing.RandomZoom(
-            height_factor, width_factor, fill_mode,
-            interpolation, seed, fill_value=fill_value
-        )
-
-    def call(self, inputs, training=True):
-        return self.op(inputs, training=training)
-
-
-class RandomRotate(DualOps):
-    # TODO: Implement RandomZoom without importing RandomRotate
-    def __init__(self,
-                 factor,
-                 fill_mode='reflect',
-                 interpolation='bilinear',
-                 p=0.5,
-                 seed=None,
-                 name=None,
-                 fill_value=0.0,
-                 **kwargs):
-        super(RandomRotate, self).__init__(
-            p=p, seed=seed, name=name, **kwargs
-        )
-
-        self.op = tfkl.experimental.preprocessing.RandomRotation(
-            factor, fill_mode, interpolation,
-            seed, fill_value=fill_value
-        )
-
-    def call(self, inputs, training=True):
-        return self.op(inputs, training=training)
-
-
-class RandomResizedCrop(DualOps):
+class RandomResizedCrop(BaseOps):
 
     def __init__(self,
                  height,
@@ -105,20 +56,15 @@ class RandomResizedCrop(DualOps):
 
         return image
 
-    def call(self, inputs, training=True):
+    def apply(self, inputs, training=True):
         image_dtype = inputs.dtype
         if training:
-            if inputs.shape.ndims == 3:
-                image = self._op(inputs)
-            elif inputs.shape.ndims == 4:
-                image = tf.map_fn(
-                    self._op, inputs)
-            return image
+            return self._op(inputs)
         else:
             return inputs
 
 
-class HorizontalFlip(DualOps):
+class HorizontalFlip(BaseOps):
 
     def __init__(self,
                  p=0.5,
@@ -130,7 +76,7 @@ class HorizontalFlip(DualOps):
             p=p, seed=seed, name=name, **kwargs
         )
 
-    def call(self, inputs, training=True):
+    def apply(self, inputs, training=True):
         if training:
             return tf.image.flip_left_right(inputs)
         else:

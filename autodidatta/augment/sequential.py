@@ -3,34 +3,7 @@ from tensorflow.keras import Sequential
 import autodidatta.augment as A
 
 
-class Augment(Sequential):
-
-    def __init__(self,
-                 layers=None,
-                 name=None,
-                 **kwargs):
-        super(Augment, self).__init__(
-            layers=layers,
-            name=name,
-            **kwargs
-            )
-
-    def call(self, image, seg=None, training=False):
-
-        # Handle corner cases where self.layers is empty
-        aug_image, aug_seg = image, seg
-
-        for layer in self.layers:
-            aug_image, aug_seg = layer.apply(
-                image=image, seg=seg, training=training)
-            image, seg = aug_image, aug_seg
-        if seg is not None:
-            return (aug_image, aug_seg)
-        else:
-            return aug_image
-
-
-class SSLAugment(Augment):
+class SSLAugment(Sequential):
 
     def __init__(self,
                  image_size,
@@ -38,6 +11,8 @@ class SSLAugment(Augment):
                  contrast,
                  saturation,
                  hue,
+                 mean=[0.4914, 0.4822, 0.4465],
+                 std=[0.247, 0.243, 0.261],
                  color_jitter_prob=0.8,
                  grayscale_prob=0.2,
                  horizontal_flip_prob=0.5,
@@ -61,6 +36,7 @@ class SSLAugment(Augment):
             padding='SAME',
             p=gaussian_prob))
         self.add(A.layers.Solarize(p=solarization_prob))
+        self.add(A.layers.Normalize(mean=mean, std=std))
         
 
 

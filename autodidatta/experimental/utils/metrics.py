@@ -3,7 +3,7 @@ from tensorflow.python.keras.metrics import MeanMetricWrapper
 from tensorflow.math import reduce_sum
 
 
-def dice_coef(y_true, y_pred, smooth=1):
+def dice_coef(y_true, y_pred, smooth=1e-10):
     y_true_f = tf.reshape(y_true, [-1])
     y_pred_f = tf.reshape(y_pred, [-1])
 

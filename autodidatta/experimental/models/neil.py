@@ -12,16 +12,27 @@ import tensorflow_datasets as tfds
 from tensorflow.keras.callbacks import CSVLogger
 
 import autodidatta.augment as A
-from autodidatta.datasets import cifar10, stl10
+from autodidatta.experimental.datasets.oai import load_dataset
+from autodidatta.experimental.models.vgg import VGG_UNet
+from autodidatta.experimental.utils.loss import invariance_variance_loss, tversky_loss
+from autodidatta.experimental.utils.metrics import dice_coef
 from autodidatta.flags import dataset_flags, training_flags, utils_flags
 from autodidatta.models.base import BaseModel
-from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
-from autodidatta.models.networks.mlp import projection_head, predictor_head
 from autodidatta.utils.accelerator import setup_accelerator
 
 # Redefine default value
 flags.FLAGS.set_default(
+    'ft_learning_rate', 1e-03)
+flags.FLAGS.set_default(
+    'warmup_epochs', 0)
+flags.FLAGS.set_default(
+    'brightness', 0.4)
+flags.FLAGS.set_default(
+    'contrast', 0.4)
+flags.FLAGS.set_default(
     'proj_hidden_dim', 64)
+flags.FLAGS.set_default(
+    'pred_hidden_dim', 64)
 flags.FLAGS.set_default(
     'output_dim', 1)
 flags.FLAGS.set_default(
@@ -55,18 +66,51 @@ class NEIL(BaseModel):
         else:
             x = data 
         
+        # Non-geometric transformation
         xi = self.transform_aug_fn(x, training=training)
-        zi = self.backbone(xi, training=training)
-        yi = self.projector(zi, training=training)
+        feat_i = self.backbone(xi, training=training)
+        zi = self.projector(feat_i, training=training)
+        pi = self.predictor(zi, training=training)
 
-        y_pred, xj = self.geometric_aug_fn(yi, x, training=training)
+        concat_input = tf.concat([zi, pi, x], axis=-1)
+        concat_output = self.geometric_aug_fn(concat_input, training=training)
 
-        zj = self.backbone(xj, training=training)
-        yj = self.projector(zj, training=training)
+        z_pred = concat_output[..., :int(zi.shape[-1])]
+        p_pred = concat_output[..., int(zi.shape[-1]):int(zi.shape[-1] + pi.shape[-1])]
+        xj = concat_output[..., int(zi.shape[-1] + pi.shape[-1]):]
+        
+        feat_j = self.backbone(xj, training=training)
+        zj = self.projector(feat_j, training=training)
+        pj = self.predictor(zj, training=training)
 
-        loss = self.loss_fn(yj, y_pred)
-        loss /= self.distribute_strategy.num_replicas_in_sync
+        loss = self.loss_fn(tf.stop_gradient(z_pred), pj) / 2
+        loss += self.loss_fn(tf.stop_gradient(zj), p_pred) / 2
         return loss
+    
+    def train_step(self, data):
+
+        with tf.GradientTape() as tape:
+            loss = self.shared_step(data, training=True)
+        
+        if self.predictor is not None:
+            trainable_variables = self.backbone.trainable_variables + \
+                self.projector.trainable_variables + \
+                self.predictor.trainable_variables
+        else:
+            trainable_variables = self.backbone.trainable_variables + \
+                self.projector.trainable_variables
+
+        grads = tape.gradient(loss, trainable_variables)
+        self.optimizer.apply_gradients(zip(grads, trainable_variables))
+
+        if self.classifier is not None:
+            self.finetune_step(data)
+            metrics_results = {m.name: m.result() for m in self.metrics}
+            results = {'similarity_loss': loss, **metrics_results}
+        else:
+            results = {'similarity_loss': loss}
+
+        return results
     
     def finetune_step(self, data):
         x, y = data
@@ -109,11 +153,9 @@ def conv_projector(hidden_filters,
                    global_bn=True):
     
     model = tf.keras.Sequential()
-    model.add(tfkl.UpSampling2D(
-        size=(8, 8), interpolation='bilinear'))
     
     for _ in range(num_layers):
-        model.add(tfkl.Conv2D(hidden_filters, 3, use_bias=False, padding='same'))
+        model.add(tfkl.Conv2D(hidden_filters, 1, use_bias=False, padding='same'))
         if global_bn:
             model.add(tfkl.experimental.SyncBatchNormalization(
                 axis=-1, momentum=0.9, epsilon=1.001e-5))
@@ -123,7 +165,7 @@ def conv_projector(hidden_filters,
         model.add(tfkl.ReLU())
 
     model.add(
-        tfkl.Conv2D(output_filters, 3, use_bias=not batch_norm_output, padding='same'))
+        tfkl.Conv2D(output_filters, 1, use_bias=not batch_norm_output, padding='same'))
     if batch_norm_output:
         if global_bn:
             model.add(tfkl.experimental.SyncBatchNormalization(
@@ -139,6 +181,8 @@ def main(argv):
 
     del argv
 
+    tf.config.set_soft_device_placement(True)
+
     # Choose accelerator 
     strategy = setup_accelerator(
         FLAGS.use_gpu, FLAGS.num_cores, FLAGS.tpu)
@@ -148,79 +192,48 @@ def main(argv):
         tf.keras.mixed_precision.set_global_policy('mixed_bfloat16')
 
     # Select dataset
-    ds_info = tfds.builder(FLAGS.dataset).info
-    if FLAGS.dataset == 'cifar10':
-        load_dataset = cifar10.load_input_fn
-        image_size = 32
-        train_split = 'train'
-        validation_split = 'test'
-    elif FLAGS.dataset == 'stl10':
-        load_dataset = stl10.load_input_fn
-        image_size = 96
-        train_split = 'unlabelled'
-        validation_split = 'test'
-    else:
-        raise NotImplementedError("other datasets have not yet been implmented")
-    
-    num_train_examples = ds_info.splits[train_split].num_examples
-    num_val_examples = ds_info.splits[validation_split].num_examples
+    train_ds, validation_ds = load_dataset(
+        'gs://oai-challenge-dataset/tfrecords',
+        batch_size=FLAGS.batch_size,
+        image_size=288,
+        training_mode='finetune',
+        fraction_data=1.0,
+        multi_class=False,
+        add_background=False,
+        normalize=True)
+
+    num_train_examples = 19200
+    num_val_examples = 4480
     steps_per_epoch = num_train_examples // FLAGS.batch_size
     validation_steps = num_val_examples // FLAGS.batch_size
-    ds_shape = (image_size, image_size, 3)
-
-    # Define train-validation split
-    train_ds = load_dataset(
-        is_training=True,
-        batch_size=FLAGS.batch_size,
-        image_size=image_size,
-        aug_fn=None,
-        pre_train=False,
-        use_bfloat16=FLAGS.use_bfloat16)
-    validation_ds = load_dataset(
-        is_training=False,
-        batch_size=FLAGS.batch_size,
-        image_size=image_size,
-        aug_fn=None,
-        pre_train=False,
-        use_bfloat16=FLAGS.use_bfloat16)
+    ds_shape = (288, 288, 1)
 
     with strategy.scope():
         # Define augmentation functions
-        geometric_aug_fn = A.Augment([
-            A.layers.RandomResizedCrop(
-                image_size, image_size, scale=(0.08, 1.0)),
-            A.layers.HorizontalFlip(p=0.5)
-        ])  
+        geometric_aug_fn = tf.keras.Sequential(
+            [tfkl.RandomZoom((0.65, -0.65)),
+             tfkl.RandomFlip()
+            ]
+        ) 
         transform_aug_fn = A.Augment([
-            A.layers.ColorJitter(
-                FLAGS.brightness,
-                FLAGS.contrast,
-                FLAGS.saturation,
-                FLAGS.hue,
-                p=0.8),
-            A.layers.ToGray(p=0.2)
+            A.layers.RandomBrightness(FLAGS.brightness),
+            A.layers.RandomContrast(FLAGS.contrast),
+            A.layers.RandomGamma([0.5, 1.5], gain=1.0)
         ])
 
         # Define backbone
-        if FLAGS.backbone == 'resnet50':
-            backbone = ResNet50(input_shape=ds_shape)
-        elif FLAGS.backbone == 'resnet34':
-            backbone = ResNet34(input_shape=ds_shape)
-        elif FLAGS.backbone == 'resnet18':
-            backbone = ResNet18(input_shape=ds_shape)
-        else:
-            raise NotImplementedError("other backbones have not yet been implemented")
+        backbone = VGG_UNet(ds_shape)
 
         # If online finetuning is enabled
         if FLAGS.online_ft:
-            assert FLAGS.dataset != 'stl10', \
-                'Online finetuning is not supported for stl10'
 
             # load classifier for downstream task evaluation
-            classifier = training_flags.load_classifier()
+            classifier = tf.keras.Sequential(
+                [tfkl.Conv2D(1, 1, activation='sigmoid', padding='same')]
+            )
 
-            finetune_loss = tf.keras.losses.sparse_categorical_crossentropy
-            metrics = ['acc']
+            finetune_loss = tversky_loss
+            metrics = [dice_coef]
         else:
             classifier = None
 
@@ -229,7 +242,9 @@ def main(argv):
             projector=conv_projector(
                 FLAGS.proj_hidden_dim,
                 FLAGS.output_dim),
-            predictor=None,
+            predictor=conv_projector(
+                FLAGS.pred_hidden_dim,
+                FLAGS.output_dim),
             geometric_aug_fn=geometric_aug_fn,
             transform_aug_fn=transform_aug_fn,
             classifier=classifier)
@@ -240,16 +255,14 @@ def main(argv):
         if FLAGS.online_ft:
             model.compile(
                 optimizer=optimizer,
-                loss_fn=tf.keras.losses.MeanSquaredError(
-                    reduction=tf.keras.losses.Reduction.NONE),
+                loss_fn=tf.keras.losses.cosine_similarity,
                 ft_optimizer=ft_optimizer,
                 loss=finetune_loss,
                 metrics=metrics)
         else:
             model.compile(
                 optimizer=optimizer,
-                loss_fn=tf.keras.losses.MeanSquaredError(
-                    reduction=tf.keras.losses.Reduction.NONE))
+                loss_fn=tf.keras.losses.cosine_similarity)
 
         # Build the model
         model.build((None, *ds_shape))

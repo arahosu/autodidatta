@@ -7,7 +7,8 @@ def conv_block(x, filters, num_conv, kernel_size=3, stride=1):
     for i in range(num_conv):
         x = tfkl.Conv2D(
             filters, kernel_size, padding='same', use_bias=False)(x)
-        x = tfkl.BatchNormalization(axis=-1, momentum=0.95, epsilon=0.001)(x)
+        x = tfkl.experimental.SyncBatchNormalization(
+                axis=-1, momentum=0.9, epsilon=1.001e-5)(x)
         x = tfkl.ReLU()(x)
 
     return x

@@ -48,6 +48,7 @@ def aug_fn(image, image_size, is_training, pre_train, mask=None):
 
 
 def parse_fn_pretrain(example_proto,
+                      aug_fn,
                       is_training,
                       image_size,
                       normalize,
@@ -133,14 +134,12 @@ def parse_fn_finetune(example_proto,
     seg = tf.clip_by_value(seg, 0., 1.)
     num_classes = seg.shape[-1]
 
-    preprocess_fn = partial(
-        aug_fn,
-        image_size=image_size, is_training=is_training, pre_train=False)
+    image = tf.image.resize_with_crop_or_pad(image, image_size, image_size)
+    seg = tf.image.resize_with_crop_or_pad(seg, image_size, image_size)
 
-    image, seg = preprocess_fn(
-            image=image, mask=seg)
     image = tf.reshape(image, [image_size, image_size, 1])
     seg = tf.reshape(seg, [image_size, image_size, num_classes])
+
     return (image, seg)
 
 
@@ -233,7 +232,6 @@ def read_tfrecord_finetune(tfrecords_dir,
 def load_dataset(dataset_dir,
                  batch_size,
                  image_size,
-                 buffer_size,
                  training_mode,
                  fraction_data,
                  multi_class,
@@ -248,7 +246,7 @@ def load_dataset(dataset_dir,
             tfrecords_dir=os.path.join(dataset_dir, train_dir),
             batch_size=batch_size,
             image_size=image_size,
-            buffer_size=buffer_size,
+            buffer_size=19200,
             is_training=True,
             fraction_data=fraction_data,
             multi_class=multi_class,
@@ -259,7 +257,7 @@ def load_dataset(dataset_dir,
             tfrecords_dir=os.path.join(dataset_dir, val_dir),
             batch_size=batch_size,
             image_size=image_size,
-            buffer_size=buffer_size,
+            buffer_size=4480,
             is_training=False,
             fraction_data=1.0,
             multi_class=multi_class,
@@ -280,19 +278,3 @@ def load_dataset(dataset_dir,
             patient_id_exclusion_list=patient_id_exclusion_list)
 
         return ds
-
-
-if __name__ == '__main__':
-    train_ds = load_dataset(
-            'gs://oai-challenge-dataset/data/tfrecords',
-            1024,
-            288,
-            1,
-            'pretrain',
-            1.0,
-            False,
-            False,
-            True)
-
-    for step, (image) in enumerate(train_ds):
-        print(step)

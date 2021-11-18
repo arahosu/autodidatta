@@ -39,7 +39,7 @@ def load_input_fn(is_training,
 
     def preprocess(image, label):
         dtype = tf.bfloat16 if use_bfloat16 else tf.float32
-        image = tf.image.convert_image_dtype(image, dtype)
+        image = tf.cast(image, dtype)
         label = tf.cast(label, dtype)
 
         if pre_train:
@@ -49,11 +49,10 @@ def load_input_fn(is_training,
                 if aug_fn_2 is not None:
                     augmentation_fn = aug_fn_2 if i == 1 else aug_fn
                 aug_img = augmentation_fn(image, training=is_training)
-                aug_img = tf.clip_by_value(aug_img, 0., 1.)
+                # aug_img = tf.clip_by_value(aug_img, 0., 1.)
                 aug_img = tf.reshape(aug_img, [image_size, image_size, 3])
                 xs.append(aug_img)
             image = tf.concat(xs, -1)
-                
         else:
             if aug_fn is not None:
                 image = aug_fn(image, training=is_training)
