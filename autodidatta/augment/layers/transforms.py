@@ -17,8 +17,8 @@ class RandomBrightness(BaseOps):
             self.lower = factor[0]
             self.upper = factor[1]
         else:
-            self.lower = -factor
-            self.upper = factor
+            self.lower = 1 - factor
+            self.upper = 1 + factor
 
         if factor < 0:
             raise ValueError('Factor must be non-negative.',
@@ -27,10 +27,14 @@ class RandomBrightness(BaseOps):
         self.seed = seed
 
     def apply(self, inputs, training=True):
+        image_dtype = inputs.dtype
         delta = tf.random.uniform(
-            [], self.lower, self.upper, seed=self.seed)
+            [], tf.maximum(self.lower, 0),
+            tf.maximum(self.upper, 0), seed=self.seed)
         if training:
-            return tf.image.adjust_brightness(inputs, delta)
+            inputs = tf.cast(inputs, tf.float32)
+            image = inputs * delta
+            return tf.cast(image, image_dtype)
         else:
             return inputs
 
@@ -161,8 +165,7 @@ class RandomHue(BaseOps):
     def apply(self, inputs, training=True):
         if training:
             return tf.image.random_hue(
-                inputs, self.factor, seed=self.seed
-            )
+                inputs, self.factor, seed=self.seed)
         else:
             return inputs
 

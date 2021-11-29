@@ -5,6 +5,9 @@ flags.DEFINE_enum(
     'dataset', 'cifar10',
     ['cifar10', 'stl10', 'imagenet'],
     'cifar10 (default), stl10, imagenet')
+flags.DEFINE_string(
+    'dataset_dir', None,
+    'directory where the dataset is stored')
 
 # Augmentation flags
 flags.DEFINE_float(

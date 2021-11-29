@@ -25,8 +25,6 @@ class SSLAugment(Sequential):
 
         self.add(A.layers.RandomResizedCrop(
             image_size, image_size, scale=(min_scale, max_scale)))
-        self.add(A.layers.HorizontalFlip(
-            p=horizontal_flip_prob))
         self.add(A.layers.ColorJitter(
             brightness, contrast, saturation, hue, p=color_jitter_prob))
         self.add(A.layers.ToGray(p=grayscale_prob))
@@ -36,6 +34,8 @@ class SSLAugment(Sequential):
             padding='SAME',
             p=gaussian_prob))
         self.add(A.layers.Solarize(p=solarization_prob))
+        self.add(A.layers.HorizontalFlip(
+            p=horizontal_flip_prob))
         self.add(A.layers.Normalize(mean=mean, std=std))
         
 
