@@ -199,13 +199,17 @@ def main(argv):
 
     # Define augmentation functions
     augment_kwargs = dataset_flags.parse_augmentation_flags()
+    if FLAGS.use_simclr_augment:
+        aug_fn = A.SimCLRAugment
+    else:
+        aug_fn = A.SSLAugment
 
-    aug_fn_1 = A.SSLAugment(
+    aug_fn_1 = aug_fn(
         image_size=image_size,
         gaussian_prob=FLAGS.gaussian_prob[0],
         solarization_prob=FLAGS.solarization_prob[0],
         **augment_kwargs)
-    aug_fn_2 = A.SSLAugment(
+    aug_fn_2 = aug_fn(
         image_size=image_size,
         gaussian_prob=FLAGS.gaussian_prob[1],
         solarization_prob=FLAGS.solarization_prob[1],
