@@ -8,7 +8,7 @@ import tensorflow.keras.layers as tfkl
 from tensorflow.keras.optimizers import SGD, Adam
 from tensorflow_addons.optimizers import LAMB, AdamW
 import tensorflow_datasets as tfds
-from tensorflow.keras.callbacks import CSVLogger
+from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint
 
 import autodidatta.augment as A
 from autodidatta.datasets import Dataset
@@ -21,7 +21,6 @@ from autodidatta.utils.loss import nt_xent_loss, nt_xent_loss_v2
 
 # Redefine default value
 flags.FLAGS.set_default('output_dim', 256)
-flags.FLAGS.set_default('use_simclr_augment', True)
 FLAGS = flags.FLAGS
 
 class SimCLR(BaseModel):
@@ -209,6 +208,17 @@ def main(argv):
     if FLAGS.save_weights:
         logdir = os.path.join(FLAGS.logdir, time)
         os.mkdir(logdir)
+        weights_file = 'simclr_weights.hdf5'
+        weights = ModelCheckpoint(
+            os.path.join(logdir, weights_file),
+            save_weights_only=True,
+            monitor='val_acc' if FLAGS.online_ft else 'val_similarity_loss',
+            mode='max' if FLAGS.online_ft else 'min',
+            save_best_only=True)
+
+        if cb is None:
+            cb = [weights]
+
     if FLAGS.save_history:
         histdir = os.path.join(FLAGS.histdir, time)
         os.mkdir(histdir)
@@ -216,7 +226,10 @@ def main(argv):
         # Create a callback for saving the training results into a csv file
         histfile = 'simclr_results.csv'
         csv_logger = CSVLogger(os.path.join(histdir, histfile))
-        cb = [csv_logger]
+        if cb is None:
+            cb = [csv_logger]
+        else:
+            cb.append(csv_logger)
 
         # Save flag params in a flag file in the same subdirectory
         flagfile = os.path.join(histdir, 'train_flags.cfg')
@@ -230,11 +243,6 @@ def main(argv):
         validation_steps=validation_steps,
         verbose=1,
         callbacks=cb)
-
-    if FLAGS.save_weights:
-        weights_name = 'simclr_weights.hdf5'
-        model.save_weights(os.path.join(logdir, weights_name), save_backbone_only=True)
-
 
 if __name__ == '__main__':
     app.run(main)

@@ -17,5 +17,5 @@ ADD implements some of the most popular self-supervised learning methods, includ
 |--------------|----------|---------|----------|-----------|----------------------|
 | Barlow Twins | ResNet18 |         |          |           | 90.22                |
 | BYOL         | ResNet18 |         |          |           | 87.76                |
-| SimCLR       | ResNet18 |         |          |           | 90.94                |
+| SimCLR       | ResNet18 |         |          |           | 90.88                |
 | SimSiam      | ResNet18 |         |          |           | 90.18                |

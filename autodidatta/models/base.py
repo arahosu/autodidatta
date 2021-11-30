@@ -119,7 +119,7 @@ class BaseModel(tf.keras.Model):
                      overwrite=True,
                      save_format=None,
                      options=None,
-                     save_backbone_only=False):
+                     save_backbone_only=True):
         if save_backbone_only:
             weights = self.backbone.save_weights(
                 filepath, overwrite, save_format, options)

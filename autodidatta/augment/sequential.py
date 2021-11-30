@@ -71,6 +71,6 @@ class SimCLRAugment(Sequential):
             sigma=tf.random.uniform([], 0.1, 2.0, dtype=tf.float32),
             padding='SAME',
             p=gaussian_prob))
-        self.add(A.layers.Solarize(p=solarization_prob))
+        self.add(A.layers.Solarize(threshold=0.5, p=solarization_prob))
         self.add(A.layers.HorizontalFlip(
             p=horizontal_flip_prob))

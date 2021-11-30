@@ -238,8 +238,16 @@ class Solarize(BaseOps):
         self.seed = seed
 
     def apply(self, inputs, training=True):
+        if self.threshold < 1.0 and inputs.dtype != tf.uint8:
+            maxval = 1.0
+        else:
+            maxval = 255
+        
+        assert self.threshold < maxval, 'threshold cannot be greater than the maximum value'
+
         if training:
-            return tf.where(inputs < self.threshold, inputs, 255 - inputs)
+            image = tf.where(inputs < self.threshold, inputs, maxval - inputs)
+            return tf.clip_by_value(image, 0, maxval)
         else:
             return inputs
 

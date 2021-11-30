@@ -9,7 +9,7 @@ import tensorflow.keras.layers as tfkl
 from tensorflow.keras.optimizers import SGD, Adam
 from tensorflow_addons.optimizers import LAMB, AdamW
 import tensorflow_datasets as tfds
-from tensorflow.keras.callbacks import CSVLogger
+from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint
 
 import autodidatta.augment as A
 from autodidatta.datasets import Dataset
@@ -274,16 +274,16 @@ def main(argv):
             classifier = None
 
         model = BYOL(backbone=backbone,
-                        projector=projection_head(
-                            hidden_dim=FLAGS.proj_hidden_dim,
-                            output_dim=FLAGS.output_dim,
-                            num_layers=FLAGS.num_head_layers,
-                            batch_norm_output=False),
-                        predictor=predictor_head(
-                            hidden_dim=FLAGS.pred_hidden_dim,
-                            output_dim=FLAGS.output_dim,
-                            num_layers=FLAGS.num_head_layers),
-                        classifier=classifier)
+                     projector=projection_head(
+                         hidden_dim=FLAGS.proj_hidden_dim,
+                         output_dim=FLAGS.output_dim,
+                         num_layers=FLAGS.num_head_layers,
+                         batch_norm_output=False),
+                     predictor=predictor_head(
+                         hidden_dim=FLAGS.pred_hidden_dim,
+                         output_dim=FLAGS.output_dim,
+                         num_layers=FLAGS.num_head_layers),
+                     classifier=classifier)
 
         # load_optimizer
         optimizer, ft_optimizer = training_flags.load_optimizer(num_train_examples)
@@ -316,6 +316,14 @@ def main(argv):
     if FLAGS.save_weights:
         logdir = os.path.join(FLAGS.logdir, time)
         os.mkdir(logdir)
+        weights_file = 'byol_weights.hdf5'
+        weights = ModelCheckpoint(
+            os.path.join(logdir, weights_file),
+            save_weights_only=True,
+            monitor='val_acc' if FLAGS.online_ft else 'val_similarity_loss',
+            mode='max' if FLAGS.online_ft else 'min',
+            save_best_only=True)
+        cb.append(weights)
     if FLAGS.save_history:
         histdir = os.path.join(FLAGS.histdir, time)
         os.mkdir(histdir)
@@ -338,11 +346,6 @@ def main(argv):
         validation_steps=validation_steps,
         verbose=1,
         callbacks=cb)
-
-    if FLAGS.save_weights:
-        weights_name = 'byol_weights.hdf5'
-        model.save_weights(os.path.join(logdir, weights_name))
-
 
 if __name__ == '__main__':
     app.run(main)

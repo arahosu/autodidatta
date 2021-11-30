@@ -6,7 +6,7 @@ import os
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 import tensorflow_datasets as tfds
-from tensorflow.keras.callbacks import CSVLogger
+from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint
 
 import autodidatta.augment as A
 from autodidatta.datasets import Dataset
@@ -229,6 +229,16 @@ def main(argv):
     if FLAGS.save_weights:
         logdir = os.path.join(FLAGS.logdir, time)
         os.mkdir(logdir)
+        weights_file = 'simclr_weights.hdf5'
+        weights = ModelCheckpoint(
+            os.path.join(logdir, weights_file),
+            save_weights_only=True,
+            monitor='val_acc' if FLAGS.online_ft else 'val_similarity_loss',
+            mode='max' if FLAGS.online_ft else 'min',
+            save_best_only=True)
+
+        if cb is None:
+            cb = [weights]
     if FLAGS.save_history:
         histdir = os.path.join(FLAGS.histdir, time)
         os.mkdir(histdir)
@@ -250,11 +260,6 @@ def main(argv):
         validation_steps=validation_steps,
         verbose=1,
         callbacks=cb)
-
-    if FLAGS.save_weights:
-        weights_name = 'simsiam_weights.hdf5'
-        model.save_weights(os.path.join(logdir, weights_name),
-                           save_backbone_only=True)
 
 
 if __name__ == '__main__':
