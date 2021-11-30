@@ -6,8 +6,6 @@ import os
 
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
-from tensorflow.keras.optimizers import SGD, Adam
-from tensorflow_addons.optimizers import LAMB, AdamW
 import tensorflow_datasets as tfds
 from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint
 
@@ -45,7 +43,7 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
                  max_steps,
                  init_tau=0.99,
                  final_tau=1.0,
-                 train_projector=False):
+                 train_projector=True):
         super(BYOLMAWeightUpdate, self).__init__()
 
         assert abs(init_tau) <= 1.
@@ -78,11 +76,18 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
             if hasattr(target_layer, 'bias'):
                 target_layer.bias.assign(self.current_tau * target_layer.bias 
                                          + (1 - self.current_tau) * online_layer.bias)
+            if hasattr(target_layer, 'gamma'):
+                target_layer.gamma.assign(self.current_tau * target_layer.gamma 
+                                         + (1 - self.current_tau) * online_layer.gamma)
+            if hasattr(target_layer, 'beta'):
+                target_layer.beta.assign(self.current_tau * target_layer.beta 
+                                         + (1 - self.current_tau) * online_layer.beta)
+                
 
         if self.train_projector:
             for online_layer, target_layer in zip(
                 self.model.projector.layers,
-                self.model.target_projector.layers):
+                self.model.target_projection.layers):
                 if hasattr(target_layer, 'kernel'):
                     target_layer.kernel.assign(self.current_tau * 
                     target_layer.kernel + (1 - self.current_tau) * 
@@ -92,6 +97,12 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
                         target_layer.bias.assign(self.current_tau * 
                         target_layer.bias + (1 - self.current_tau) * 
                         online_layer.bias)
+                if hasattr(target_layer, 'gamma'):
+                    target_layer.gamma.assign(self.current_tau * target_layer.gamma 
+                    + (1 - self.current_tau) * online_layer.gamma)
+                if hasattr(target_layer, 'beta'):
+                    target_layer.beta.assign(self.current_tau * target_layer.beta 
+                    + (1 - self.current_tau) * online_layer.beta)
 
 
 class BYOL(BaseModel):

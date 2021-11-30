@@ -5,8 +5,6 @@ import os
 
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
-from tensorflow.keras.optimizers import SGD, Adam
-from tensorflow_addons.optimizers import LAMB, AdamW
 import tensorflow_datasets as tfds
 from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint
 

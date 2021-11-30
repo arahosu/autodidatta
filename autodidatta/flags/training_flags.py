@@ -44,7 +44,7 @@ flags.DEFINE_integer(
 flags.DEFINE_integer(
     'train_epochs', 1000, 'Number of epochs to train the model')
 flags.DEFINE_bool(
-    'train_projector', False,
+    'train_projector', True,
     'Set whether to train the projector head or not (Default)')
 flags.DEFINE_bool('use_bfloat16', True, 'set whether to use mixed precision')
 flags.DEFINE_integer(
