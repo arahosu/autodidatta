@@ -61,7 +61,7 @@ class SimCLR(BaseModel):
         zj = tf.math.l2_normalize(zj, axis=-1)
 
         loss = self.loss_fn(
-            hidden1=zi, hidden2=zj,
+            zi, zj,
             temperature=self.loss_temperature,
             strategy=self.distribute_strategy)
 
