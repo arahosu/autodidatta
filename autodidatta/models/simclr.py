@@ -5,8 +5,6 @@ import os
 
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
-from tensorflow.keras.optimizers import SGD, Adam
-from tensorflow_addons.optimizers import LAMB, AdamW
 import tensorflow_datasets as tfds
 from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint
 
@@ -17,7 +15,7 @@ from autodidatta.models.base import BaseModel
 from autodidatta.models.networks.mlp import projection_head
 from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
 from autodidatta.utils.accelerator import setup_accelerator
-from autodidatta.utils.loss import nt_xent_loss, nt_xent_loss_v2
+from autodidatta.utils.loss import nt_xent_loss_v2
 
 # Redefine default value
 flags.FLAGS.set_default('output_dim', 256)
