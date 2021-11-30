@@ -9,7 +9,7 @@ import tensorflow_datasets as tfds
 from tensorflow.keras.callbacks import CSVLogger
 
 import autodidatta.augment as A
-from autodidatta.datasets import cifar10, stl10
+from autodidatta.datasets import Dataset
 from autodidatta.flags import dataset_flags, training_flags, utils_flags
 from autodidatta.models.base import BaseModel
 from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
@@ -97,53 +97,70 @@ def main(argv):
         tf.keras.mixed_precision.set_global_policy('mixed_bfloat16')
 
     # Select dataset
-    ds_info = tfds.builder(FLAGS.dataset).info
     if FLAGS.dataset == 'cifar10':
-        load_dataset = cifar10.load_input_fn
         image_size = 32
         train_split = 'train'
         validation_split = 'test'
     elif FLAGS.dataset == 'stl10':
-        load_dataset = stl10.load_input_fn
         image_size = 96
-        train_split = 'unlabelled'
+        train_split = 'train' if not online_ft else 'unlabelled'
         validation_split = 'test'
+    elif FLAGS.dataset == 'imagenet2012':
+        assert FLAGS.dataset_dir is not None, 'for imagenet2012, \
+            dataset direcotry must be specified'
+        image_size = 224
+        train_split = 'train'
+        validation_split = 'validation'
     else:
         raise NotImplementedError("other datasets have not yet been implmented")
-    
-    num_train_examples = ds_info.splits[train_split].num_examples
-    num_val_examples = ds_info.splits[validation_split].num_examples
-    steps_per_epoch = num_train_examples // FLAGS.batch_size
-    validation_steps = num_val_examples // FLAGS.batch_size
-    ds_shape = (image_size, image_size, 3)
 
     # Define augmentation functions
     augment_kwargs = dataset_flags.parse_augmentation_flags()
 
-    aug_fn_1 = A.SSLAugment(image_size=image_size,
-                            gaussian_prob=FLAGS.gaussian_prob[0],
-                            solarization_prob=FLAGS.solarization_prob[0],
-                            **augment_kwargs)    
-    aug_fn_2 = A.SSLAugment(image_size=image_size,
-                            gaussian_prob=FLAGS.gaussian_prob[1],
-                            solarization_prob=FLAGS.solarization_prob[1],
-                            **augment_kwargs)  
+    aug_fn_1 = A.SSLAugment(
+        image_size=image_size,
+        gaussian_prob=FLAGS.gaussian_prob[0],
+        solarization_prob=FLAGS.solarization_prob[0],
+        **augment_kwargs)
+    aug_fn_2 = A.SSLAugment(
+        image_size=image_size,
+        gaussian_prob=FLAGS.gaussian_prob[1],
+        solarization_prob=FLAGS.solarization_prob[1],
+        **augment_kwargs)
 
-    # Define train-validation split
-    train_ds = load_dataset(
-        is_training=True,
-        batch_size=FLAGS.batch_size,
-        image_size=image_size,
-        aug_fn=aug_fn_1,
-        aug_fn_2=aug_fn_2,
+    # Define dataloaders
+    train_loader = Dataset(
+        FLAGS.dataset,
+        train_split,
+        FLAGS.dataset_dir,
+        aug_fn_1, aug_fn_2)
+    validation_loader = Dataset(
+        FLAGS.dataset,
+        validation_split,
+        FLAGS.dataset_dir,
+        aug_fn_1, aug_fn_2)
+
+    # Define datasets from the dataloaders
+    train_ds = train_loader.load(
+        FLAGS.batch_size,
+        image_size,
+        True,
+        True,
         use_bfloat16=FLAGS.use_bfloat16)
-    validation_ds = load_dataset(
-        is_training=False,
-        batch_size=FLAGS.batch_size,
-        image_size=image_size,
-        aug_fn=aug_fn_1,
-        aug_fn_2=aug_fn_2,
+
+    validation_ds = validation_loader.load(
+        FLAGS.batch_size,
+        image_size,
+        False,
+        True,
         use_bfloat16=FLAGS.use_bfloat16)
+    
+    # Get number of examples from dataloaders
+    num_train_examples = train_loader.dataset_size
+    num_val_examples = validation_loader.dataset_size
+    steps_per_epoch = num_train_examples // FLAGS.batch_size
+    validation_steps = num_val_examples // FLAGS.batch_size
+    ds_shape = (image_size, image_size, 3)
 
     with strategy.scope():
         # Define backbone

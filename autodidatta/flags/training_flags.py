@@ -56,15 +56,15 @@ flags.DEFINE_bool(
     'eval_linear', True,
     'Set whether to run linear (Default) or non-linear evaluation protocol')
 flags.DEFINE_float(
-    'fraction_data',
-    1.0,
-    'fraction of training data to be used during downstream evaluation')
-flags.DEFINE_float(
     'ft_learning_rate', 1e-04, 'set learning rate for finetuning optimizer')
 flags.DEFINE_bool(
     'online_ft',
     True,
-    'set whether to enable online finetuning (True by default)')  
+    'set whether to enable online finetuning (True by default)')
+flags.DEFINE_integer(
+    'percentage_data',
+    100,
+    'percentage of training data to be used during downstream evaluation')
 
 FLAGS = flags.FLAGS      
 
