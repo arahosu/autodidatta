@@ -23,7 +23,7 @@ flags.DEFINE_integer(
 flags.DEFINE_float(
     'learning_rate', 5e-04, 'set learning rate for optimizer.')
 flags.DEFINE_float(
-    'loss_temperature', 0.5, 'set temperature for loss function')
+    'loss_temperature', 0.2, 'set temperature for loss function')
 flags.DEFINE_integer(
     'num_head_layers', 1,
     'set number of intermediate layers in the projector/predictor head')

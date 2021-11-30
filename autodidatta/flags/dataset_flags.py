@@ -28,6 +28,9 @@ flags.DEFINE_list(
 flags.DEFINE_list(
     'solarization_prob', [0.0, 0.0],
     'probability of applying solarization augmentation')
+flags.DEFINE_bool(
+    'use_simclr_augment', False,
+    'Use the data augmentation ')
 
 FLAGS = flags.FLAGS  
 
