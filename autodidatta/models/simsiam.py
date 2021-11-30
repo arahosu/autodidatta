@@ -6,7 +6,7 @@ import os
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 import tensorflow_datasets as tfds
-from tensorflow.keras.callbacks import CSVLogger
+from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint
 
 import autodidatta.augment as A
 from autodidatta.datasets import Dataset
@@ -116,13 +116,17 @@ def main(argv):
 
     # Define augmentation functions
     augment_kwargs = dataset_flags.parse_augmentation_flags()
+    if FLAGS.use_simclr_augment:
+        aug_fn = A.SimCLRAugment
+    else:
+        aug_fn = A.SSLAugment
 
-    aug_fn_1 = A.SSLAugment(
+    aug_fn_1 = aug_fn(
         image_size=image_size,
         gaussian_prob=FLAGS.gaussian_prob[0],
         solarization_prob=FLAGS.solarization_prob[0],
         **augment_kwargs)
-    aug_fn_2 = A.SSLAugment(
+    aug_fn_2 = aug_fn(
         image_size=image_size,
         gaussian_prob=FLAGS.gaussian_prob[1],
         solarization_prob=FLAGS.solarization_prob[1],
@@ -225,6 +229,16 @@ def main(argv):
     if FLAGS.save_weights:
         logdir = os.path.join(FLAGS.logdir, time)
         os.mkdir(logdir)
+        weights_file = 'simclr_weights.hdf5'
+        weights = ModelCheckpoint(
+            os.path.join(logdir, weights_file),
+            save_weights_only=True,
+            monitor='val_acc' if FLAGS.online_ft else 'val_similarity_loss',
+            mode='max' if FLAGS.online_ft else 'min',
+            save_best_only=True)
+
+        if cb is None:
+            cb = [weights]
     if FLAGS.save_history:
         histdir = os.path.join(FLAGS.histdir, time)
         os.mkdir(histdir)
@@ -246,11 +260,6 @@ def main(argv):
         validation_steps=validation_steps,
         verbose=1,
         callbacks=cb)
-
-    if FLAGS.save_weights:
-        weights_name = 'simsiam_weights.hdf5'
-        model.save_weights(os.path.join(logdir, weights_name),
-                           save_backbone_only=True)
 
 
 if __name__ == '__main__':

@@ -8,7 +8,7 @@ import tensorflow.keras.layers as tfkl
 from tensorflow.keras.optimizers import SGD, Adam
 from tensorflow_addons.optimizers import LAMB, AdamW
 import tensorflow_datasets as tfds
-from tensorflow.keras.callbacks import CSVLogger
+from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint
 
 import autodidatta.augment as A
 from autodidatta.datasets import Dataset
@@ -61,7 +61,7 @@ class SimCLR(BaseModel):
         zj = tf.math.l2_normalize(zj, axis=-1)
 
         loss = self.loss_fn(
-            hidden1=zi, hidden2=zj,
+            zi, zj,
             temperature=self.loss_temperature,
             strategy=self.distribute_strategy)
 
@@ -100,13 +100,17 @@ def main(argv):
 
     # Define augmentation functions
     augment_kwargs = dataset_flags.parse_augmentation_flags()
+    if FLAGS.use_simclr_augment:
+        aug_fn = A.SimCLRAugment
+    else:
+        aug_fn = A.SSLAugment
 
-    aug_fn_1 = A.SSLAugment(
+    aug_fn_1 = aug_fn(
         image_size=image_size,
         gaussian_prob=FLAGS.gaussian_prob[0],
         solarization_prob=FLAGS.solarization_prob[0],
         **augment_kwargs)
-    aug_fn_2 = A.SSLAugment(
+    aug_fn_2 = aug_fn(
         image_size=image_size,
         gaussian_prob=FLAGS.gaussian_prob[1],
         solarization_prob=FLAGS.solarization_prob[1],
@@ -204,6 +208,17 @@ def main(argv):
     if FLAGS.save_weights:
         logdir = os.path.join(FLAGS.logdir, time)
         os.mkdir(logdir)
+        weights_file = 'simclr_weights.hdf5'
+        weights = ModelCheckpoint(
+            os.path.join(logdir, weights_file),
+            save_weights_only=True,
+            monitor='val_acc' if FLAGS.online_ft else 'val_similarity_loss',
+            mode='max' if FLAGS.online_ft else 'min',
+            save_best_only=True)
+
+        if cb is None:
+            cb = [weights]
+
     if FLAGS.save_history:
         histdir = os.path.join(FLAGS.histdir, time)
         os.mkdir(histdir)
@@ -211,7 +226,10 @@ def main(argv):
         # Create a callback for saving the training results into a csv file
         histfile = 'simclr_results.csv'
         csv_logger = CSVLogger(os.path.join(histdir, histfile))
-        cb = [csv_logger]
+        if cb is None:
+            cb = [csv_logger]
+        else:
+            cb.append(csv_logger)
 
         # Save flag params in a flag file in the same subdirectory
         flagfile = os.path.join(histdir, 'train_flags.cfg')
@@ -225,11 +243,6 @@ def main(argv):
         validation_steps=validation_steps,
         verbose=1,
         callbacks=cb)
-
-    if FLAGS.save_weights:
-        weights_name = 'simclr_weights.hdf5'
-        model.save_weights(os.path.join(logdir, weights_name), save_backbone_only=True)
-
 
 if __name__ == '__main__':
     app.run(main)

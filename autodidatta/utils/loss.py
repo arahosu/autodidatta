@@ -2,9 +2,13 @@ import tensorflow as tf
 LARGE_NUM = 1e9
 
 
-def nt_xent_loss(out_i, out_j, temperature):
+def nt_xent_loss(out_i, out_j, temperature, strategy=None):
     """Negative cross-entropy loss function for SimCLR
     """
+    if strategy is not None:
+        out_i = tpu_cross_replica_concat(out_i)
+        out_j = tpu_cross_replica_concat(out_j)
+
     out = tf.concat([out_i, out_j], axis=0)
     n_samples = out.shape[0]
 
