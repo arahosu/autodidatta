@@ -327,18 +327,18 @@ def main(argv):
         train_projector=FLAGS.train_projector)
     cb = [movingavg_cb]
 
-    if FLAGS.save_weights:
+    if FLAGS.logdir is not None:
         logdir = os.path.join(FLAGS.logdir, time)
         os.mkdir(logdir)
         weights_file = 'byol_weights.hdf5'
         weights = ModelCheckpoint(
             os.path.join(logdir, weights_file),
             save_weights_only=True,
-            monitor='val_acc' if FLAGS.online_ft else 'val_similarity_loss',
+            monitor='val_acc' if FLAGS.online_ft else 'similarity_loss',
             mode='max' if FLAGS.online_ft else 'min',
             save_best_only=True)
         cb.append(weights)
-    if FLAGS.save_history:
+    if FLAGS.histdir is not None:
         histdir = os.path.join(FLAGS.histdir, time)
         os.mkdir(histdir)
 
