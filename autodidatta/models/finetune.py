@@ -15,6 +15,11 @@ from autodidatta.flags import dataset_flags, training_flags, utils_flags
 from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
 from autodidatta.utils.accelerator import setup_accelerator
 
+flags.DEFINE_string(
+    'weights', None,
+    'Directory for the trained model weights. Only used for finetuning')
+
+
 flags.FLAGS.set_default('train_epochs', 20)
 flags.FLAGS.set_default('batch_size', 256)
 flags.FLAGS.set_default('ft_learning_rate', 1e-03)
