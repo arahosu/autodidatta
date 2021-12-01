@@ -104,12 +104,12 @@ def load_optimizer(num_train_examples):
     return optimizer, ft_optimizer
 
 
-def load_classifier():
+def load_classifier(num_classes):
 
     if FLAGS.eval_linear:
         classifier = classifier = tf.keras.Sequential(
             [tfkl.Flatten(),
-             tfkl.Dense(10, activation='softmax')],
+             tfkl.Dense(num_classes, activation='softmax')],
              name='classifier')
     else:
         if not FLAGS.use_gpu or FLAGS.num_cores <= 1:
@@ -124,7 +124,7 @@ def load_classifier():
              tfkl.Dense(512, use_bias=False),
              BatchNorm,
              tfkl.ReLU(),
-             tfkl.Dense(10, activation='softmax')],
+             tfkl.Dense(num_classes, activation='softmax')],
              name='classifier')
         
     return classifier

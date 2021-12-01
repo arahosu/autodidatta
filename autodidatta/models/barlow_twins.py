@@ -90,20 +90,23 @@ def main(argv):
         tf.keras.mixed_precision.set_global_policy('mixed_bfloat16')
 
     # Select dataset
-    if FLAGS.dataset == 'cifar10':
+    if FLAGS.dataset in ['cifar10', 'cifar100']:
         image_size = 32
         train_split = 'train'
         validation_split = 'test'
+        num_classes = 10 if FLAGS.dataset == 'cifar10' else 100
     elif FLAGS.dataset == 'stl10':
         image_size = 96
         train_split = 'train' if not online_ft else 'unlabelled'
         validation_split = 'test'
+        num_classes = 10
     elif FLAGS.dataset == 'imagenet2012':
         assert FLAGS.dataset_dir is not None, 'for imagenet2012, \
             dataset direcotry must be specified'
         image_size = 224
         train_split = 'train'
         validation_split = 'validation'
+        num_classes = 1000
     else:
         raise NotImplementedError("other datasets have not yet been implmented")
 
@@ -176,7 +179,7 @@ def main(argv):
                 'Online finetuning is not supported for stl10'
 
             # load classifier for downstream task evaluation
-            classifier = training_flags.load_classifier()
+            classifier = training_flags.load_classifier(num_classes)
 
             finetune_loss = tf.keras.losses.sparse_categorical_crossentropy
             metrics = ['acc']
