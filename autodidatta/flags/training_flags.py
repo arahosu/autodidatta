@@ -61,10 +61,6 @@ flags.DEFINE_bool(
     'online_ft',
     True,
     'set whether to enable online finetuning (True by default)')
-flags.DEFINE_integer(
-    'percentage_data',
-    100,
-    'percentage of training data to be used during downstream evaluation')
 
 FLAGS = flags.FLAGS      
 
