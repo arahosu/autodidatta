@@ -239,7 +239,10 @@ def main(argv):
         # Create a callback for saving the training results into a csv file
         histfile = 'barlow_twins_results.csv'
         csv_logger = CSVLogger(os.path.join(histdir, histfile))
-        cb = [csv_logger]
+        if cb is None:
+            cb = [csv_logger]
+        else:
+            cb.append(csv_logger)
 
         # Save flag params in a flag file in the same subdirectory
         flagfile = os.path.join(histdir, 'train_flags.cfg')
