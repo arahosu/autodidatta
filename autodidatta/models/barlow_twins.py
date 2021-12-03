@@ -222,7 +222,7 @@ def main(argv):
     if FLAGS.logdir is not None:
         logdir = os.path.join(FLAGS.logdir, time)
         os.mkdir(logdir)
-        weights_file = 'simclr_weights.hdf5'
+        weights_file = 'barlow_twins_weights.hdf5'
         weights = ModelCheckpoint(
             os.path.join(logdir, weights_file),
             save_weights_only=True,
