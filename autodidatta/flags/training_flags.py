@@ -21,7 +21,7 @@ flags.DEFINE_enum(
 flags.DEFINE_integer(
     'batch_size', 512, 'set batch size for pre-training.')
 flags.DEFINE_float(
-    'learning_rate', 5e-04, 'set learning rate for optimizer.')
+    'learning_rate', 1e-03, 'set learning rate for optimizer.')
 flags.DEFINE_float(
     'loss_temperature', 0.2, 'set temperature for loss function')
 flags.DEFINE_integer(
@@ -56,15 +56,11 @@ flags.DEFINE_bool(
     'eval_linear', True,
     'Set whether to run linear (Default) or non-linear evaluation protocol')
 flags.DEFINE_float(
-    'ft_learning_rate', 1e-04, 'set learning rate for finetuning optimizer')
+    'ft_learning_rate', 2e-04, 'set learning rate for finetuning optimizer')
 flags.DEFINE_bool(
     'online_ft',
     True,
     'set whether to enable online finetuning (True by default)')
-flags.DEFINE_integer(
-    'percentage_data',
-    100,
-    'percentage of training data to be used during downstream evaluation')
 
 FLAGS = flags.FLAGS      
 
@@ -72,10 +68,12 @@ def load_optimizer(num_train_examples):
     
     lr_schedule = WarmUpAndCosineDecay(
                 FLAGS.learning_rate, num_train_examples,
-                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs,
+                learning_rate_scaling='linear' if FLAGS.optimizer == 'sgd' else None)
     ft_lr_schedule = WarmUpAndCosineDecay(
                 FLAGS.ft_learning_rate, num_train_examples,
-                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs,
+                learning_rate_scaling='linear' if FLAGS.optimizer == 'sgd' else None)
 
     if FLAGS.optimizer == 'lamb':
         optimizer = LAMB(

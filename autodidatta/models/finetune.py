@@ -15,14 +15,17 @@ from autodidatta.flags import dataset_flags, training_flags, utils_flags
 from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
 from autodidatta.utils.accelerator import setup_accelerator
 
+flags.DEFINE_integer(
+    'percentage_data',
+    100,
+    'percentage of training data to be used during downstream evaluation')
 flags.DEFINE_string(
     'weights', None,
     'Directory for the trained model weights. Only used for finetuning')
 
-
-flags.FLAGS.set_default('train_epochs', 20)
+flags.FLAGS.set_default('train_epochs', 300)
 flags.FLAGS.set_default('batch_size', 256)
-flags.FLAGS.set_default('ft_learning_rate', 1e-03)
+flags.FLAGS.set_default('ft_learning_rate', 1e-04)
 FLAGS = flags.FLAGS
 
 def main(argv):
@@ -40,17 +43,20 @@ def main(argv):
     # Select dataset
     train_split = 'train[:%s%%]' %(FLAGS.percentage_data)
 
-    if FLAGS.dataset == 'cifar10':
+    if FLAGS.dataset in ['cifar10', 'cifar100']:
         image_size = 32
         validation_split = 'test'
+        num_classes = 10 if FLAGS.dataset == 'cifar10' else 100
     elif FLAGS.dataset == 'stl10':
         image_size = 96
         validation_split = 'test'
+        num_classes = 10
     elif FLAGS.dataset == 'imagenet2012':
         assert FLAGS.dataset_dir is not None, 'for imagenet2012, \
             dataset direcotry must be specified'
         image_size = 224
         validation_split = 'validation'
+        num_classes = 1000
     else:
         raise NotImplementedError("other datasets have not yet been implmented")
 
@@ -128,7 +134,7 @@ def main(argv):
         backbone.trainable = False
 
         # load classifier for downstream task evaluation
-        classifier = training_flags.load_classifier()
+        classifier = training_flags.load_classifier(num_classes)
         loss = tf.keras.losses.sparse_categorical_crossentropy
         metrics = ['acc']
 
@@ -149,7 +155,7 @@ def main(argv):
     time = datetime.now().strftime("%Y%m%d-%H%M%S")
     cb = None
 
-    if FLAGS.save_history:
+    if FLAGS.histdir is not None:
         histdir = os.path.join(FLAGS.histdir, time)
         os.mkdir(histdir)
 

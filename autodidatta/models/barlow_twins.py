@@ -222,7 +222,7 @@ def main(argv):
     if FLAGS.logdir is not None:
         logdir = os.path.join(FLAGS.logdir, time)
         os.mkdir(logdir)
-        weights_file = 'simclr_weights.hdf5'
+        weights_file = 'barlow_twins_weights.hdf5'
         weights = ModelCheckpoint(
             os.path.join(logdir, weights_file),
             save_weights_only=True,
@@ -239,7 +239,10 @@ def main(argv):
         # Create a callback for saving the training results into a csv file
         histfile = 'barlow_twins_results.csv'
         csv_logger = CSVLogger(os.path.join(histdir, histfile))
-        cb = [csv_logger]
+        if cb is None:
+            cb = [csv_logger]
+        else:
+            cb.append(csv_logger)
 
         # Save flag params in a flag file in the same subdirectory
         flagfile = os.path.join(histdir, 'train_flags.cfg')
