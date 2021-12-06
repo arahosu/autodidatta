@@ -21,9 +21,9 @@ flags.DEFINE_enum(
 flags.DEFINE_integer(
     'batch_size', 512, 'set batch size for pre-training.')
 flags.DEFINE_float(
-    'learning_rate', 5e-04, 'set learning rate for optimizer.')
+    'learning_rate', 1e-03, 'set learning rate for optimizer.')
 flags.DEFINE_float(
-    'loss_temperature', 0.5, 'set temperature for loss function')
+    'loss_temperature', 0.2, 'set temperature for loss function')
 flags.DEFINE_integer(
     'num_head_layers', 1,
     'set number of intermediate layers in the projector/predictor head')
@@ -44,7 +44,7 @@ flags.DEFINE_integer(
 flags.DEFINE_integer(
     'train_epochs', 1000, 'Number of epochs to train the model')
 flags.DEFINE_bool(
-    'train_projector', False,
+    'train_projector', True,
     'Set whether to train the projector head or not (Default)')
 flags.DEFINE_bool('use_bfloat16', True, 'set whether to use mixed precision')
 flags.DEFINE_integer(
@@ -56,15 +56,11 @@ flags.DEFINE_bool(
     'eval_linear', True,
     'Set whether to run linear (Default) or non-linear evaluation protocol')
 flags.DEFINE_float(
-    'fraction_data',
-    1.0,
-    'fraction of training data to be used during downstream evaluation')
-flags.DEFINE_float(
-    'ft_learning_rate', 1e-04, 'set learning rate for finetuning optimizer')
+    'ft_learning_rate', 2e-04, 'set learning rate for finetuning optimizer')
 flags.DEFINE_bool(
     'online_ft',
     True,
-    'set whether to enable online finetuning (True by default)')  
+    'set whether to enable online finetuning (True by default)')
 
 FLAGS = flags.FLAGS      
 
@@ -72,10 +68,12 @@ def load_optimizer(num_train_examples):
     
     lr_schedule = WarmUpAndCosineDecay(
                 FLAGS.learning_rate, num_train_examples,
-                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs,
+                learning_rate_scaling='linear' if FLAGS.optimizer == 'sgd' else None)
     ft_lr_schedule = WarmUpAndCosineDecay(
                 FLAGS.ft_learning_rate, num_train_examples,
-                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs)
+                FLAGS.batch_size, FLAGS.warmup_epochs, FLAGS.train_epochs,
+                learning_rate_scaling='linear' if FLAGS.optimizer == 'sgd' else None)
 
     if FLAGS.optimizer == 'lamb':
         optimizer = LAMB(
@@ -104,12 +102,12 @@ def load_optimizer(num_train_examples):
     return optimizer, ft_optimizer
 
 
-def load_classifier():
+def load_classifier(num_classes):
 
     if FLAGS.eval_linear:
         classifier = classifier = tf.keras.Sequential(
             [tfkl.Flatten(),
-             tfkl.Dense(10, activation='softmax')],
+             tfkl.Dense(num_classes, activation='softmax')],
              name='classifier')
     else:
         if not FLAGS.use_gpu or FLAGS.num_cores <= 1:
@@ -124,7 +122,7 @@ def load_classifier():
              tfkl.Dense(512, use_bias=False),
              BatchNorm,
              tfkl.ReLU(),
-             tfkl.Dense(10, activation='softmax')],
+             tfkl.Dense(num_classes, activation='softmax')],
              name='classifier')
         
     return classifier

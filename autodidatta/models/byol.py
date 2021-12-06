@@ -6,13 +6,11 @@ import os
 
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
-from tensorflow.keras.optimizers import SGD, Adam
-from tensorflow_addons.optimizers import LAMB, AdamW
 import tensorflow_datasets as tfds
-from tensorflow.keras.callbacks import CSVLogger
+from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint
 
 import autodidatta.augment as A
-from autodidatta.datasets import cifar10, stl10
+from autodidatta.datasets import Dataset
 from autodidatta.flags import dataset_flags, training_flags, utils_flags
 from autodidatta.models.base import BaseModel
 from autodidatta.models.networks.resnet import ResNet18, ResNet34, ResNet50
@@ -45,7 +43,7 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
                  max_steps,
                  init_tau=0.99,
                  final_tau=1.0,
-                 train_projector=False):
+                 train_projector=True):
         super(BYOLMAWeightUpdate, self).__init__()
 
         assert abs(init_tau) <= 1.
@@ -78,11 +76,18 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
             if hasattr(target_layer, 'bias'):
                 target_layer.bias.assign(self.current_tau * target_layer.bias 
                                          + (1 - self.current_tau) * online_layer.bias)
+            if hasattr(target_layer, 'gamma'):
+                target_layer.gamma.assign(self.current_tau * target_layer.gamma 
+                                         + (1 - self.current_tau) * online_layer.gamma)
+            if hasattr(target_layer, 'beta'):
+                target_layer.beta.assign(self.current_tau * target_layer.beta 
+                                         + (1 - self.current_tau) * online_layer.beta)
+                
 
         if self.train_projector:
             for online_layer, target_layer in zip(
                 self.model.projector.layers,
-                self.model.target_projector.layers):
+                self.model.target_projection.layers):
                 if hasattr(target_layer, 'kernel'):
                     target_layer.kernel.assign(self.current_tau * 
                     target_layer.kernel + (1 - self.current_tau) * 
@@ -92,6 +97,12 @@ class BYOLMAWeightUpdate(tf.keras.callbacks.Callback):
                         target_layer.bias.assign(self.current_tau * 
                         target_layer.bias + (1 - self.current_tau) * 
                         online_layer.bias)
+                if hasattr(target_layer, 'gamma'):
+                    target_layer.gamma.assign(self.current_tau * target_layer.gamma 
+                    + (1 - self.current_tau) * online_layer.gamma)
+                if hasattr(target_layer, 'beta'):
+                    target_layer.beta.assign(self.current_tau * target_layer.beta 
+                    + (1 - self.current_tau) * online_layer.beta)
 
 
 class BYOL(BaseModel):
@@ -180,53 +191,77 @@ def main(argv):
         tf.keras.mixed_precision.set_global_policy('mixed_bfloat16')
 
     # Select dataset
-    ds_info = tfds.builder(FLAGS.dataset).info
-    if FLAGS.dataset == 'cifar10':
-        load_dataset = cifar10.load_input_fn
+    if FLAGS.dataset in ['cifar10', 'cifar100']:
         image_size = 32
         train_split = 'train'
         validation_split = 'test'
+        num_classes = 10 if FLAGS.dataset == 'cifar10' else 100
     elif FLAGS.dataset == 'stl10':
-        load_dataset = stl10.load_input_fn
         image_size = 96
-        train_split = 'unlabelled'
+        train_split = 'train' if not online_ft else 'unlabelled'
         validation_split = 'test'
+        num_classes = 10
+    elif FLAGS.dataset == 'imagenet2012':
+        assert FLAGS.dataset_dir is not None, 'for imagenet2012, \
+            dataset direcotry must be specified'
+        image_size = 224
+        train_split = 'train'
+        validation_split = 'validation'
+        num_classes = 1000
     else:
         raise NotImplementedError("other datasets have not yet been implmented")
-    
-    num_train_examples = ds_info.splits[train_split].num_examples
-    num_val_examples = ds_info.splits[validation_split].num_examples
-    steps_per_epoch = num_train_examples // FLAGS.batch_size
-    validation_steps = num_val_examples // FLAGS.batch_size
-    ds_shape = (image_size, image_size, 3)
 
     # Define augmentation functions
     augment_kwargs = dataset_flags.parse_augmentation_flags()
+    if FLAGS.use_simclr_augment:
+        aug_fn = A.SimCLRAugment
+    else:
+        aug_fn = A.SSLAugment
 
-    aug_fn_1 = A.SSLAugment(image_size=image_size,
-                            gaussian_prob=FLAGS.gaussian_prob[0],
-                            solarization_prob=FLAGS.solarization_prob[0],
-                            **augment_kwargs)    
-    aug_fn_2 = A.SSLAugment(image_size=image_size,
-                            gaussian_prob=FLAGS.gaussian_prob[1],
-                            solarization_prob=FLAGS.solarization_prob[1],
-                            **augment_kwargs)  
+    aug_fn_1 = aug_fn(
+        image_size=image_size,
+        gaussian_prob=FLAGS.gaussian_prob[0],
+        solarization_prob=FLAGS.solarization_prob[0],
+        **augment_kwargs)
+    aug_fn_2 = aug_fn(
+        image_size=image_size,
+        gaussian_prob=FLAGS.gaussian_prob[1],
+        solarization_prob=FLAGS.solarization_prob[1],
+        **augment_kwargs)
 
-    # Define train-validation split
-    train_ds = load_dataset(
-        is_training=True,
-        batch_size=FLAGS.batch_size,
-        image_size=image_size,
-        aug_fn=aug_fn_1,
-        aug_fn_2=aug_fn_2,
+    # Define dataloaders
+    train_loader = Dataset(
+        FLAGS.dataset,
+        train_split,
+        FLAGS.dataset_dir,
+        aug_fn_1, aug_fn_2)
+    validation_loader = Dataset(
+        FLAGS.dataset,
+        validation_split,
+        FLAGS.dataset_dir,
+        aug_fn_1, aug_fn_2)
+
+    # Define datasets from the dataloaders
+    train_ds = train_loader.load(
+        FLAGS.batch_size,
+        image_size,
+        True,
+        True,
         use_bfloat16=FLAGS.use_bfloat16)
-    validation_ds = load_dataset(
-        is_training=False,
-        batch_size=FLAGS.batch_size,
-        image_size=image_size,
-        aug_fn=aug_fn_1,
-        aug_fn_2=aug_fn_2,
+
+    validation_ds = validation_loader.load(
+        FLAGS.batch_size,
+        image_size,
+        False,
+        True,
         use_bfloat16=FLAGS.use_bfloat16)
+    
+    # Get number of examples from dataloaders
+    num_train_examples = train_loader.dataset_size
+    num_val_examples = validation_loader.dataset_size
+    steps_per_epoch = num_train_examples // FLAGS.batch_size
+    validation_steps = num_val_examples // FLAGS.batch_size
+    ds_shape = (image_size, image_size, 3)
 
     with strategy.scope():
         # Define backbone
@@ -245,7 +280,7 @@ def main(argv):
                 'Online finetuning is not supported for stl10'
 
             # load classifier for downstream task evaluation
-            classifier = training_flags.load_classifier()
+            classifier = training_flags.load_classifier(num_classes)
 
             finetune_loss = tf.keras.losses.sparse_categorical_crossentropy
             metrics = ['acc']
@@ -253,16 +288,16 @@ def main(argv):
             classifier = None
 
         model = BYOL(backbone=backbone,
-                        projector=projection_head(
-                            hidden_dim=FLAGS.proj_hidden_dim,
-                            output_dim=FLAGS.output_dim,
-                            num_layers=FLAGS.num_head_layers,
-                            batch_norm_output=False),
-                        predictor=predictor_head(
-                            hidden_dim=FLAGS.pred_hidden_dim,
-                            output_dim=FLAGS.output_dim,
-                            num_layers=FLAGS.num_head_layers),
-                        classifier=classifier)
+                     projector=projection_head(
+                         hidden_dim=FLAGS.proj_hidden_dim,
+                         output_dim=FLAGS.output_dim,
+                         num_layers=FLAGS.num_head_layers,
+                         batch_norm_output=False),
+                     predictor=predictor_head(
+                         hidden_dim=FLAGS.pred_hidden_dim,
+                         output_dim=FLAGS.output_dim,
+                         num_layers=FLAGS.num_head_layers),
+                     classifier=classifier)
 
         # load_optimizer
         optimizer, ft_optimizer = training_flags.load_optimizer(num_train_examples)
@@ -292,10 +327,18 @@ def main(argv):
         train_projector=FLAGS.train_projector)
     cb = [movingavg_cb]
 
-    if FLAGS.save_weights:
+    if FLAGS.logdir is not None:
         logdir = os.path.join(FLAGS.logdir, time)
         os.mkdir(logdir)
-    if FLAGS.save_history:
+        weights_file = 'byol_weights.hdf5'
+        weights = ModelCheckpoint(
+            os.path.join(logdir, weights_file),
+            save_weights_only=True,
+            monitor='val_acc' if FLAGS.online_ft else 'similarity_loss',
+            mode='max' if FLAGS.online_ft else 'min',
+            save_best_only=True)
+        cb.append(weights)
+    if FLAGS.histdir is not None:
         histdir = os.path.join(FLAGS.histdir, time)
         os.mkdir(histdir)
 
@@ -317,11 +360,6 @@ def main(argv):
         validation_steps=validation_steps,
         verbose=1,
         callbacks=cb)
-
-    if FLAGS.save_weights:
-        weights_name = 'byol_weights.hdf5'
-        model.save_weights(os.path.join(logdir, weights_name))
-
 
 if __name__ == '__main__':
     app.run(main)

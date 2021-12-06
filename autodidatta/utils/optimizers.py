@@ -34,6 +34,8 @@ class WarmUpAndCosineDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
                 scaled_lr = self.base_learning_rate * self.batch_size / 256.
             elif self.learning_rate_scaling == 'sqrt':
                 scaled_lr = self.base_learning_rate * sqrt(self.batch_size)
+            elif self.learning_rate_scaling == None:
+                scaled_lr = self.base_learning_rate
             else:
                 raise ValueError('Unknown learning rate scaling {}'.format(
                     self.learning_rate_scaling))
