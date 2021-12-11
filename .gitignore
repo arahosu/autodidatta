@@ -5,7 +5,7 @@
 *.txt
 *.tfrecords
 *.ipynb
-*.sh
+# *.sh
 
 # Python cache
 **/__pycache__
