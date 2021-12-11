@@ -13,6 +13,6 @@
 *.cpython-37.pyc
 
 training_logs/
-scripts/
+# scripts/
 weights/
 .ipynb_checkpoints/
