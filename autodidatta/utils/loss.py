@@ -196,3 +196,24 @@ def barlow_twins_loss(hidden1,
     loss /= strategy.num_replicas_in_sync
 
     return loss
+
+
+def moco_loss(key,
+              query,
+              queue,
+              loss_temperature,
+              strategy=None):
+
+    pos = tf.einsum('nc,nc->n', query, key)[:,None]
+    neg = tf.einsum('nc,ck->nk', query, queue)
+    logits = tf.concat((pos, neg), axis=1)
+
+    logits /= loss_temperature
+    # targets = tf.zeros(query.shape[0], dtype=tf.int64)
+    # loss = tf.keras.losses.sparse_categorical_crossentropy(targets, logits, from_logits=True)
+    logits = tf.math.abs(logits)
+
+    if strategy is not None:
+        logits /= strategy.num_replicas_in_sync
+    
+    return logits
