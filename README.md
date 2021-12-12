@@ -19,6 +19,7 @@ ADD implements some of the most popular self-supervised learning methods, includ
 | BYOL         | ResNet18 | 84.66   | 90.04    | 91.55     | 91.79                |
 | SimCLR       | ResNet18 | 84.39   | 89.24    | 90.37     | 90.84                |
 | SimSiam      | ResNet18 | 84.51   | 87.95    | 89.37     | 89.61                |
+| Supervised   | ResNet18 | 38.52   | 73.97    | 93.01     |                      |
 
 ### CIFAR100
 
@@ -28,3 +29,4 @@ ADD implements some of the most popular self-supervised learning methods, includ
 | BYOL         | ResNet18 | 36.31   | 58.93    | 68.01     | 68.28                |
 | SimCLR       | ResNet18 | 34.86   | 58.05    | 66.16     | 66.39                |
 | SimSiam      | ResNet18 | 32.89   | 51.74    | 62.34     | 62.36                |
+| Supervised   | ResNet18 |  8.45   | 23.07    | 66.53     |                      |
