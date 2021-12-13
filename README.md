@@ -29,7 +29,7 @@ ADD implements some of the most popular self-supervised learning methods, includ
 | SimCLR       |        66.16        |         66.39        |
 | SimSiam      |        62.34        |         62.36        |
 
-# Semi-Supervised Evaluation Results
+## Semi-Supervised Evaluation Results
 
 ### CIFAR10
 
