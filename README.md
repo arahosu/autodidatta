@@ -13,20 +13,40 @@ ADD implements some of the most popular self-supervised learning methods, includ
 
 ### CIFAR10
 
-| Method       | Backbone | FT (1%) | FT (10%) | FT (100%) | Linear Eval (online) |
-|--------------|----------|---------|----------|-----------|----------------------|
-| Barlow Twins | ResNet18 | 85.70   | 89.24    | 90.43     | 90.82                |
-| BYOL         | ResNet18 | 84.66   | 90.04    | 91.55     | 91.79                |
-| SimCLR       | ResNet18 | 84.39   | 89.24    | 90.37     | 90.84                |
-| SimSiam      | ResNet18 | 84.51   | 87.95    | 89.37     | 89.61                |
-| Supervised   | ResNet18 | 38.52   | 73.97    | 93.01     |                      |
+|    Method    | Top-1 Acc. (online) | Top-1 Acc. (offline) |
+|:------------:|:-------------------:|----------------------|
+| Barlow Twins |        90.82        |         90.43        |
+| BYOL         |        91.55        |         91.79        |
+| SimCLR       |        90.37        |         90.84        |
+| SimSiam      |        89.37        |         89.61        |
 
 ### CIFAR100
 
-| Method       | Backbone | FT (1%) | FT (10%) | FT (100%) | Linear Eval (online) |
-|--------------|----------|---------|----------|-----------|----------------------|
-| Barlow Twins | ResNet18 | 39.89   | 59.19    | 66.17     | 67.60                |
-| BYOL         | ResNet18 | 36.31   | 58.93    | 68.01     | 68.28                |
-| SimCLR       | ResNet18 | 34.86   | 58.05    | 66.16     | 66.39                |
-| SimSiam      | ResNet18 | 32.89   | 51.74    | 62.34     | 62.36                |
-| Supervised   | ResNet18 |  8.45   | 23.07    | 66.53     |                      |
+|    Method    | Top-1 Acc. (online) | Top-1 Acc. (offline) |
+|:------------:|:-------------------:|----------------------|
+| Barlow Twins |        66.17        |         67.60        |
+| BYOL         |        68.01        |         68.28        |
+| SimCLR       |        66.16        |         66.39        |
+| SimSiam      |        62.34        |         62.36        |
+
+## Semi-Supervised Evaluation Results
+
+### CIFAR10
+
+|    Method    |   1%  | 10%   |
+|:------------:|:-----:|-------|
+| Barlow Twins | 85.70 | 89.24 |
+| BYOL         | 84.66 | 90.04 |
+| SimCLR       | 84.39 | 89.24 |
+| SimSiam      | 84.51 | 87.95 |
+| Supervised   | 38.52 | 73.97 |
+
+### CIFAR100
+
+|    Method    |   1%  | 10%   |
+|:------------:|:-----:|-------|
+| Barlow Twins | 39.89 | 59.19 |
+| BYOL         | 36.31 | 58.93 |
+| SimCLR       | 34.86 | 58.05 |
+| SimSiam      | 32.89 | 51.74 |
+| Supervised   | 8.45  | 23.07 |
