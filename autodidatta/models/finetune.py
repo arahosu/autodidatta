@@ -22,10 +22,13 @@ flags.DEFINE_integer(
 flags.DEFINE_string(
     'weights', None,
     'Directory for the trained model weights. Only used for finetuning')
+flags.DEFINE_bool(
+    'finetune', True,
+    'Flag to indicate whether to train just the linear classifier or finetune the whole network'
+)
 
 flags.FLAGS.set_default('train_epochs', 300)
 flags.FLAGS.set_default('batch_size', 256)
-flags.FLAGS.set_default('ft_learning_rate', 1e-04)
 FLAGS = flags.FLAGS
 
 def main(argv):
@@ -130,8 +133,12 @@ def main(argv):
             raise NotImplementedError("other backbones have not yet been implemented")
 
         # Load weights and freeze the backbone
-        backbone.load_weights(FLAGS.weights)
-        backbone.trainable = False
+        if FLAGS.weights is not None:
+            backbone.load_weights(FLAGS.weights)
+            if not FLAGS.finetune: 
+                backbone.trainable = False
+        else:
+            print("Training {} in a fully supervised setting".format(FLAGS.backbone))
 
         # load classifier for downstream task evaluation
         classifier = training_flags.load_classifier(num_classes)
@@ -142,8 +149,7 @@ def main(argv):
             [backbone,
              classifier])
 
-        optimizer = AdamW(
-            weight_decay=1e-06, learning_rate=FLAGS.ft_learning_rate)
+        optimizer, _ = training_flags.load_optimizer(num_train_examples)
         
         model.compile(
             optimizer=optimizer,
