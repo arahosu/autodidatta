@@ -23,7 +23,7 @@ flags.DEFINE_string(
     'weights', None,
     'Directory for the trained model weights. Only used for finetuning')
 flags.DEFINE_bool(
-    'finetune', False,
+    'finetune', True,
     'Flag to indicate whether to train just the linear classifier or finetune the whole network'
 )
 
