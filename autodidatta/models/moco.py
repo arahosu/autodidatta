@@ -3,6 +3,7 @@ from absl import flags
 from datetime import datetime
 import math
 import os
+import random
 
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
@@ -28,7 +29,7 @@ flags.DEFINE_integer(
 flags.FLAGS.set_default(
     'proj_hidden_dim', 2048)
 flags.FLAGS.set_default(
-    'output_dim', 128)
+    'output_dim', 256)
 flags.FLAGS.set_default(
     'use_bfloat16', False)
 
@@ -139,6 +140,8 @@ class Moco(BaseModel):
         xi = x[..., :num_channels]
         xj = x[..., num_channels:]
 
+        xi, unshuffle_idx = self.shuffle_bn(xi)
+
         k1 = self.target_projector(
             self.target_backbone(xi,
             training=False),
@@ -150,6 +153,9 @@ class Moco(BaseModel):
             training=False),
             training=False)
         k2 = tf.math.l2_normalize(k2, axis=-1)
+
+        k1 = self.unshuffle_bn(k1, unshuffle_idx)
+        k2 = self.unshuffle_bn(k2, unshuffle_idx)
 
         q1 = self.projector(
             self.backbone(xi,
@@ -166,8 +172,6 @@ class Moco(BaseModel):
         loss = self.loss_fn(q1, k2, self.queue[1], self.loss_temperature, self.distribute_strategy)
         loss += self.loss_fn(q2, k1, self.queue[0], self.loss_temperature, self.distribute_strategy)
         loss /= 2
-
-        loss = loss + sum(self.losses)
 
         loss /= self.distribute_strategy.num_replicas_in_sync
 
@@ -202,20 +206,36 @@ class Moco(BaseModel):
     def concat_fn(self, strategy, key_per_replica):
         return tf.concat(key_per_replica, axis=0)
 
-    def unshuffle_bn(self, key, batch_size, unshuffle_idx):
+    def unshuffle_bn(self, key, unshuffle_idx):
+
         _replica_context = tf.distribute.get_replica_context()
         key_all_replica = _replica_context.merge_call(
             self.concat_fn, args=(key,))
         unshuffle_idx_all_replica = _replica_context.merge_call(
             self.concat_fn, args=(unshuffle_idx,))
         new_key_list = []
-        for idx in unshuffle_idx_all_replica:
+        for i in range(unshuffle_idx_all_replica.shape[0]):
+            idx = unshuffle_idx_all_replica[i]
             new_key_list.append(tf.expand_dims(key_all_replica[idx], axis=0))
         key_orig = tf.concat(tuple(new_key_list), axis=0)
-        key = key_orig[(batch_size//self.distribute_strategy.num_replicas_in_sync)*(_replica_context.replica_id_in_sync_group):
-                        (batch_size//self.distribute_strategy.num_replicas_in_sync)*(_replica_context.replica_id_in_sync_group+1)]
+        key = key_orig[(key.shape[0]//self.distribute_strategy.num_replicas_in_sync)*(_replica_context.replica_id_in_sync_group):
+                        (key.shape[0]//self.distribute_strategy.num_replicas_in_sync)*(_replica_context.replica_id_in_sync_group+1)]
         return key
-    
+
+    def shuffle_bn(self, key):
+        if self.distribute_strategy.num_replicas_in_sync > 1:
+            pre_shuffle = [(i, key[i]) for i in range(key.shape[0])]
+            random.shuffle(pre_shuffle)
+            shuffle_idx = []
+            value_temp = []
+            for vv in pre_shuffle:
+                shuffle_idx.append(vv[0])
+                value_temp.append(tf.expand_dims(vv[1], axis=0))
+            key = tf.concat(value_temp, axis=0)
+            unshuffle_idx = tf.argsort(shuffle_idx)
+        return key, unshuffle_idx
+
+
     def reduce_key(self, key):
         _replica_context = tf.distribute.get_replica_context()
         all_key = _replica_context.merge_call(self.concat_fn, args=(key,))

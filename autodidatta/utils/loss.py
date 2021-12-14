@@ -209,11 +209,11 @@ def moco_loss(key,
     logits = tf.concat((pos, neg), axis=1)
 
     logits /= loss_temperature
-    # targets = tf.zeros(query.shape[0], dtype=tf.int64)
-    # loss = tf.keras.losses.sparse_categorical_crossentropy(targets, logits, from_logits=True)
-    logits = tf.math.abs(logits)
+    targets = tf.zeros(query.shape[0], dtype=tf.int64)
+    loss = tf.nn.sparse_softmax_cross_entropy_with_logits(targets, logits)
+    loss = tf.reduce_mean(loss)
 
     if strategy is not None:
-        logits /= strategy.num_replicas_in_sync
+        loss /= strategy.num_replicas_in_sync
     
-    return logits
+    return loss
