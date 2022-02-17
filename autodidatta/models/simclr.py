@@ -117,6 +117,10 @@ def main(argv):
         solarization_prob=FLAGS.solarization_prob[1],
         **augment_kwargs)
 
+    if FLAGS.dataset == 'imagenet2012':
+        aug_fn_1.add(A.layers.CentralCrop(image_size, image_size, 0.875))
+        aug_fn_2.add(A.layers.CentralCrop(image_size, image_size, 0.875))
+
     # Define dataloaders
     train_loader = Dataset(
         FLAGS.dataset,

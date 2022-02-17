@@ -58,7 +58,7 @@ class Dataset:
                             as_supervised=True)
 
         if shuffle:
-            dataset = dataset.shuffle(buffer_size=dataset_size).repeat()
+            dataset = dataset.shuffle(buffer_size=batch_size * 50).repeat()
 
         dataset = dataset.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
         dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)

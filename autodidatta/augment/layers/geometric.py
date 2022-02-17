@@ -34,7 +34,7 @@ class RandomResizedCrop(BaseOps):
         ratio = tuple([aspect_ratio*x for x in self.ratio])
 
         distorted_bb = sample_distorted_bounding_box(
-            image_size=inputs.shape,
+            image_size=tf.shape(inputs),
             bounding_boxes=bbox,
             min_object_covered=0.1,
             aspect_ratio_range=ratio,
@@ -81,3 +81,43 @@ class HorizontalFlip(BaseOps):
             return tf.image.flip_left_right(inputs)
         else:
             return inputs
+
+
+class CentralCrop(BaseOps):
+    def __init__(self,
+                 height,
+                 width,
+                 crop_fraction,
+                 test_crop_only=True,
+                 interpolation=tf.image.ResizeMethod.BICUBIC,
+                 p=1.0,
+                 seed=None,
+                 name=None,
+                 **kwargs):
+
+        super(CentralCrop, self).__init__(
+            p=p, seed=seed, name=name, **kwargs)
+
+        self.height= height
+        self.width = width
+        self.crop_fraction = crop_fraction
+        self.test_crop_only = test_crop_only
+        self.interpolation = interpolation
+    
+    def _op(self, inputs):
+        image_dtype = inputs.dtype
+        image = tf.image.central_crop(inputs, self.crop_fraction)
+        image = tf.image.resize(
+            image, [self.height, self.width], self.interpolation)
+        image = tf.cast(image, image_dtype)
+
+        return image
+
+    def apply(self, inputs, training=True):
+        if training:
+            if self.test_crop_only:
+                return inputs
+            else:
+                return self._op(inputs)
+        else:
+            return self._op(inputs)
