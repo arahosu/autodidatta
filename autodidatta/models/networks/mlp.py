@@ -2,11 +2,11 @@ import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 
 
-def projection_head(hidden_dim=2048,
-                    output_dim=2048,
-                    num_layers=1,
-                    batch_norm_output=False,
-                    global_bn=True):
+def projector_head(hidden_dim=2048,
+                   output_dim=2048,
+                   num_layers=1,
+                   batch_norm_output=False,
+                   global_bn=True):
 
     model = tf.keras.Sequential()
     model.add(tfkl.GlobalAveragePooling2D())

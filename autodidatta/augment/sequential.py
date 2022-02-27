@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tensorflow.keras.layers as tfkl
 from tensorflow.keras import Sequential
 import autodidatta.augment as A
 
@@ -19,24 +20,29 @@ class SSLAugment(Sequential):
                  gaussian_prob=0.0,
                  solarization_prob=0.0,
                  min_scale=0.08,
-                 max_scale=1.0):
+                 max_scale=1.0,
+                 seed=None):
         
         super(SSLAugment, self).__init__()
+    
+        self.seed = seed
 
         self.add(A.layers.RandomResizedCrop(
-            image_size, image_size, scale=(min_scale, max_scale)))
+            image_size, image_size, scale=(min_scale, max_scale), seed=self.seed))
         self.add(A.layers.ColorJitter(
-            brightness, contrast, saturation, hue, p=color_jitter_prob))
-        self.add(A.layers.ToGray(p=grayscale_prob))
+            brightness, contrast, saturation, hue, p=color_jitter_prob, seed=self.seed))
+        self.add(A.layers.ToGray(p=grayscale_prob, seed=self.seed))
         self.add(A.layers.GaussianBlur(
             kernel_size=image_size // 10,
-            sigma=tf.random.uniform([], 0.1, 2.0, dtype=tf.float32),
+            sigma=tf.random.stateless_uniform(
+                [], [self.seed, self.seed+1], 0.1, 2.0, dtype=tf.float32),
             padding='SAME',
-            p=gaussian_prob))
-        self.add(A.layers.Solarize(p=solarization_prob))
+            p=gaussian_prob,
+            seed=self.seed))
+        self.add(A.layers.Solarize(p=solarization_prob, seed=self.seed))
         self.add(A.layers.HorizontalFlip(
-            p=horizontal_flip_prob))
-        self.add(A.layers.Normalize(mean=mean, std=std))
+            p=horizontal_flip_prob, seed=self.seed))
+        self.add(tfkl.Normalization(mean=mean, variance=tf.math.square(std)))
 
 
 class SimCLRAugment(Sequential):
@@ -55,22 +61,28 @@ class SimCLRAugment(Sequential):
                  gaussian_prob=0.0,
                  solarization_prob=0.0,
                  min_scale=0.08,
-                 max_scale=1.0):
+                 max_scale=1.0,
+                 seed=None):
         
         super(SimCLRAugment, self).__init__()
 
-        self.add(A.layers.Normalize(mean=mean, std=std))
+        self.seed = seed
+
+        self.add(tfkl.Normalization(mean=mean, variance=tf.math.square(std)))
         self.add(A.layers.RandomResizedCrop(
-            image_size, image_size, scale=(min_scale, max_scale)))
+            image_size, image_size, scale=(min_scale, max_scale), seed=self.seed))
         self.add(A.layers.ColorJitter(
             brightness, contrast, saturation, hue,
-            p=color_jitter_prob, clip_value=True))
-        self.add(A.layers.ToGray(p=grayscale_prob))
+            p=color_jitter_prob, clip_value=True, seed=self.seed))
+        self.add(A.layers.ToGray(p=grayscale_prob, seed=self.seed))
         self.add(A.layers.GaussianBlur(
             kernel_size=image_size // 10,
-            sigma=tf.random.uniform([], 0.1, 2.0, dtype=tf.float32),
+            sigma=tf.random.stateless_uniform(
+                [], [self.seed, self.seed+1], 0.1, 2.0, dtype=tf.float32),
             padding='SAME',
-            p=gaussian_prob))
-        self.add(A.layers.Solarize(threshold=0.5, p=solarization_prob))
+            p=gaussian_prob,
+            seed=self.seed))
+        self.add(A.layers.Solarize(
+            threshold=0.5, p=solarization_prob, seed=self.seed))
         self.add(A.layers.HorizontalFlip(
-            p=horizontal_flip_prob))
+            p=horizontal_flip_prob, seed=self.seed))

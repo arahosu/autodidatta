@@ -5,6 +5,20 @@ from tensorflow.image import sample_distorted_bounding_box
 
 
 class RandomResizedCrop(BaseOps):
+    """ Inception-style random cropping (Szegedy et al., 2015)
+    
+    Args:
+    height: int, the height of input space.
+    width: int, the width of input space.
+    scale: [float, float], the range of cropped size.
+    ratio: [float, float], the range of cropped aspect ratio.
+    interpolation: tf.image.ResizeMethod, flag used to define the 
+        interpolation algorithm for resizing the input.
+    p: float, probability of applying the transform.
+    seed: Random seed. Must have dtype int32 or int64 
+        (When using XLA/TPU, only int32 is allowed).
+    name: str, a name for the operation (optional).
+    """
 
     def __init__(self,
                  height,
@@ -57,7 +71,6 @@ class RandomResizedCrop(BaseOps):
         return image
 
     def apply(self, inputs, training=True):
-        image_dtype = inputs.dtype
         if training:
             return self._op(inputs)
         else:
@@ -65,6 +78,14 @@ class RandomResizedCrop(BaseOps):
 
 
 class HorizontalFlip(BaseOps):
+    """ Applies random horizontal flip
+
+    Args:
+    p: float, probability of applying the transform.
+    seed: Random seed. Must have dtype int32 or int64 
+        (When using XLA/TPU, only int32 is allowed).
+    name: str, a name for the operation (optional).
+    """
 
     def __init__(self,
                  p=0.5,
@@ -81,43 +102,3 @@ class HorizontalFlip(BaseOps):
             return tf.image.flip_left_right(inputs)
         else:
             return inputs
-
-
-class CentralCrop(BaseOps):
-    def __init__(self,
-                 height,
-                 width,
-                 crop_fraction,
-                 test_crop_only=True,
-                 interpolation=tf.image.ResizeMethod.BICUBIC,
-                 p=1.0,
-                 seed=None,
-                 name=None,
-                 **kwargs):
-
-        super(CentralCrop, self).__init__(
-            p=p, seed=seed, name=name, **kwargs)
-
-        self.height= height
-        self.width = width
-        self.crop_fraction = crop_fraction
-        self.test_crop_only = test_crop_only
-        self.interpolation = interpolation
-    
-    def _op(self, inputs):
-        image_dtype = inputs.dtype
-        image = tf.image.central_crop(inputs, self.crop_fraction)
-        image = tf.image.resize(
-            image, [self.height, self.width], self.interpolation)
-        image = tf.cast(image, image_dtype)
-
-        return image
-
-    def apply(self, inputs, training=True):
-        if training:
-            if self.test_crop_only:
-                return inputs
-            else:
-                return self._op(inputs)
-        else:
-            return self._op(inputs)

@@ -5,7 +5,7 @@ class BaseModel(tf.keras.Model):
 
     def __init__(self,
                  backbone,
-                 projector,
+                 projector=None,
                  predictor=None,
                  classifier=None):
         
@@ -19,7 +19,9 @@ class BaseModel(tf.keras.Model):
     def build(self, input_shape):
 
         self.backbone.build(input_shape)
-        self.projector.build(self.backbone.compute_output_shape(input_shape))
+
+        if self.projector is not None:
+            self.projector.build(self.backbone.compute_output_shape(input_shape))
 
         if self.predictor is not None:
             self.predictor.build(
@@ -36,13 +38,14 @@ class BaseModel(tf.keras.Model):
 
         return self.backbone(x, training=training)
     
-    def compile(self, loss_fn, ft_optimizer=None, **kwargs):
+    def compile(self, loss_fn=None, ft_optimizer=None, **kwargs):
         super(BaseModel, self).compile(**kwargs)
         self.loss_fn = loss_fn
+        
         if self.classifier is not None:
             assert ft_optimizer is not None, \
-                'ft_optimizer should not be None if self.classifier is not \
-                    None'
+                'ft_optimizer should not be None if self.classifier is \
+                    not None'
             self.ft_optimizer = ft_optimizer
     
     def compute_output_shape(self, input_shape):

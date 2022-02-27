@@ -1,11 +1,21 @@
 import tensorflow as tf
+from tensorflow.keras.optimizers.schedules import LearningRateSchedule
+from tensorflow.keras.optimizers import SGD, Adam
+from tensorflow_addons.optimizers import LAMB, AdamW
 from math import sqrt
 
+OPTIMIZER = {
+    'lamb': LAMB,
+    'adam': Adam,
+    'adamw': AdamW,
+    'sgd': SGD,
+}
 
-class WarmUpAndCosineDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
+class WarmUpAndCosineDecay(LearningRateSchedule):
     """Applies a warmup schedule on a given learning rate decay schedule.
+
     Taken from Google Research SimCLR repository:
-    https://github.com/google-research/simclr/blob/dec99a81a4ceccb0a5a893afecbc2ee18f1d76c3/tf2/model.py#L78
+    https://github.com/google-research/simclr
     """
 
     def __init__(self,
@@ -58,3 +68,20 @@ class WarmUpAndCosineDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
             'base_learning_rate': self.base_learning_rate,
             'num_examples': self.num_examples,
             }
+
+def load_optimizer(optimizer_name,
+                   learning_rate,
+                   num_train_examples,
+                   batch_size,
+                   train_epochs,
+                   warmup_epochs,
+                   optimizer_configs=None):
+
+    lr_schedule = WarmUpAndCosineDecay(
+        learning_rate, num_train_examples,
+        batch_size, warmup_epochs, train_epochs,
+        learning_rate_scaling='linear' if optimizer_name == 'sgd' else None)
+
+    optimizer = OPTIMIZER[optimizer_name](
+        learning_rate=learning_rate, **optimizer_configs)
+    return optimizer
