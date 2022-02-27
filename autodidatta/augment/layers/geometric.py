@@ -2,6 +2,8 @@ from autodidatta.augment.layers.base import BaseOps
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 from tensorflow.image import sample_distorted_bounding_box
+import matplotlib.pyplot as plt
+import math
 
 
 class RandomResizedCrop(BaseOps):
