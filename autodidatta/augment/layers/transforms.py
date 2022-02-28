@@ -3,24 +3,14 @@ from autodidatta.augment.layers.base import BaseOps
 
 
 class RandomBrightness(BaseOps):
-    """ Randomly changes the brightness of the input image
-
-    Args:
-    factor: [float, float] or float, factor for changing the brightness
-        of the input image. 
-    p: float, probability of applying the transform.
-    seed: Random seed. Must have dtype int32 or int64 
-        (When using XLA/TPU, only int32 is allowed).
-    name: str, a name for the operation (optional).
-    """
-
     def __init__(self,
                  factor,
                  p=1.0,
+                 seed=None,
                  name=None,
                  **kwargs):
         super(RandomBrightness, self).__init__(
-            p=p, name=name, **kwargs
+            p=p, seed=seed, name=name, **kwargs
         )
 
         if isinstance(factor, (tuple, list)):
@@ -31,41 +21,35 @@ class RandomBrightness(BaseOps):
             self.upper = 1 + factor
 
         if factor < 0:
-            raise ValueError('Factor must be non-negative,',
+            raise ValueError('Factor must be non-negative.',
                              ' got {}'.format(factor))
+
+        self.seed = seed
 
     def apply(self, inputs, training=True):
         image_dtype = inputs.dtype
         delta = tf.random.uniform(
             [], tf.maximum(self.lower, 0),
-            tf.maximum(self.upper, 0),
-            dtype=tf.float32)
+            tf.maximum(self.upper, 0), seed=self.seed)
         if training:
-            return inputs * tf.cast(delta, image_dtype)
+            inputs = tf.cast(inputs, tf.float32)
+            image = inputs * delta
+            return tf.cast(image, image_dtype)
         else:
             return inputs
 
 
 class RandomContrast(BaseOps):
-    """ Randomly changes the contrast of the input image
-
-    Args:
-    factor: [float, float] or float, factor for changing the contrast
-        of the input image. 
-    p: float, probability of applying the transform.
-    seed: Random seed. Must have dtype int32 or int64 
-        (When using XLA/TPU, only int32 is allowed).
-    name: str, a name for the operation (optional).
-    """
 
     def __init__(self,
                  factor,
                  p=1.0,
+                 seed=None,
                  name=None,
                  **kwargs):
 
         super(RandomContrast, self).__init__(
-            p=p, name=name, **kwargs
+            p=p, seed=seed, name=name, **kwargs
             )
 
         if isinstance(factor, (tuple, list)):
@@ -75,34 +59,28 @@ class RandomContrast(BaseOps):
             self.lower = 1 - factor
             self.upper = 1 + factor
 
+        self.seed = seed
+
     def apply(self, inputs, training=True):
         if training:
             return tf.image.random_contrast(
-                inputs, self.lower, self.upper)
+                inputs, self.lower, self.upper, self.seed
+            )
         else:
             return inputs
 
 
 class RandomGamma(BaseOps):
-    """ Randomly performs Gamma Correction on the input image
-
-    Args:
-    gamma: [float, float] or float, gamma factor.
-    gain: [float, float] or float, gain factor.
-    p: float, probability of applying the transform.
-    seed: Random seed. Must have dtype int32 or int64 
-        (When using XLA/TPU, only int32 is allowed).
-    name: str, a name for the operation (optional).
-    """
 
     def __init__(self,
                  gamma,
                  gain,
                  p=1.0,
+                 seed=None,
                  name=None,
                  **kwargs):
         super(RandomGamma, self).__init__(
-            p=p, name=name, **kwargs
+            p=p, seed=seed, name=name, **kwargs
             )
 
         if isinstance(gamma, (tuple, list)):
@@ -111,7 +89,6 @@ class RandomGamma(BaseOps):
         else:
             self.lower_gamma = 0.
             self.upper_gamma = gamma
-
         if isinstance(gain, (tuple, list)):
             self.lower_gain = gain[0]
             self.upper_gain = gain[1]
@@ -123,15 +100,14 @@ class RandomGamma(BaseOps):
             raise ValueError('Gamma cannot have negative values',
                              ' got {}'.format(gamma))
 
+        self.seed = seed
+
     def apply(self, inputs, training=True):
-        image_dtype = inputs.dtype
 
         random_gamma = tf.random.uniform(
-            [], self.lower_gamma, self.upper_gamma,
-            dtype=image_dtype)
+            [], self.lower_gamma, self.upper_gamma, seed=self.seed)
         random_gain = tf.random.uniform(
-            [], self.lower_gain, self.upper_gain,
-            dtype=image_dtype)
+            [], self.lower_gain, self.upper_gain, seed=self.seed)
 
         if training:
             image = random_gain * tf.math.sign(inputs) * \
@@ -142,24 +118,15 @@ class RandomGamma(BaseOps):
 
 
 class RandomSaturation(BaseOps):
-    """ Randomly changes the saturation of the input image
-
-    Args:
-    factor: [float, float] or float, factor for changing the saturation
-        of the input image. 
-    p: float, probability of applying the transform.
-    seed: Random seed. Must have dtype int32 or int64 
-        (When using XLA/TPU, only int32 is allowed).
-    name: str, a name for the operation (optional).
-    """
 
     def __init__(self,
                  factor,
                  p=1.0,
+                 seed=None,
                  name=None,
                  **kwargs):
         super(RandomSaturation, self).__init__(
-            p=p, name=name, **kwargs
+            p=p, seed=seed, name=name, **kwargs
         )
 
         if isinstance(factor, (tuple, list)):
@@ -169,103 +136,80 @@ class RandomSaturation(BaseOps):
             self.lower = 1 - factor
             self.upper = 1 + factor
 
+        self.seed = seed
+
     def apply(self, inputs, training=True):
         if training:
             return tf.image.random_saturation(
-                inputs, self.lower, self.upper)
+                inputs, self.lower, self.upper, seed=self.seed
+            )
         else:
             return inputs
 
 
 class RandomHue(BaseOps):
-    """ Randomly changes the hue of the input image
-
-    Args:
-    factor: float, factor for changing the hue of the input image. 
-    p: float, probability of applying the transform.
-    seed: Random seed. Must have dtype int32 or int64 
-        (When using XLA/TPU, only int32 is allowed).
-    name: str, a name for the operation (optional).
-    """
 
     def __init__(self,
                  factor,
                  p=1.0,
+                 seed=None,
                  name=None,
                  **kwargs):
         super(RandomHue, self).__init__(
-            p=p, name=name, **kwargs
+            p=p, seed=seed, name=name, **kwargs
         )
 
         self.factor = factor
+        self.seed = seed
 
     def apply(self, inputs, training=True):
         if training:
             return tf.image.random_hue(
-                inputs, self.factor)
+                inputs, self.factor, seed=self.seed)
         else:
             return inputs
 
 
 class ColorJitter(BaseOps):
-    """ Color jitter transform described in SimCLR (Chen et al., 2019)
-
-    Args:
-    brightness: [float, float] or float, factor for changing the 
-        brightness of the image.
-    contrast: [float, float] or float, factor for changing the 
-        contrast of the image.
-    saturation: [float, float] or float, factor for changing the 
-        saturation of the image.
-    hue: [float, float] or float, factor for changing the 
-        hue of the image.
-    p: float, probability of applying the transform.
-    clip_value: bool, clip the values to a range [0, 1.] for float tensor,
-        [0, 255] for int tensor.
-    random_order: bool, set to True to apply the transforms in a random order
-    seed: Random seed. Must have dtype int32 or int64 
-        (When using XLA/TPU, only int32 is allowed).
-    name: str, a name for the operation (optional).
-    """
 
     def __init__(self,
                  brightness,
                  contrast,
                  saturation,
                  hue,
-                 p=0.8,
                  clip_value=False,
                  random_order=True,
+                 p=0.8,
+                 seed=None,
                  name=None,
                  **kwargs):
         super(ColorJitter, self).__init__(
-            p=p, name=name, **kwargs
+            p=p, seed=seed, name=name, **kwargs
         )
 
-        self.brightness_op = RandomBrightness(brightness)
-        self.contrast_op = RandomContrast(contrast)
-        self.saturation_op = RandomSaturation(saturation)
-        self.hue_op = RandomHue(hue)
+        self.brightness_op = RandomBrightness(brightness, seed=seed)
+        self.contrast_op = RandomContrast(contrast, seed=seed)
+        self.saturation_op = RandomSaturation(saturation, seed=seed)
+        self.hue_op = RandomHue(hue, seed=seed)
 
         self.clip_value = clip_value
         self.random_order = random_order
+        self.seed = seed
 
     def apply(self, inputs, training=True):
         image_dtype = inputs.dtype
-        image_max_val = tf.math.reduce_max(inputs)
         perm = tf.random.shuffle(tf.range(4))
-
         for i in range(4):
             idx = perm[i] if self.random_order else i
             inputs = self.apply_transform(
                 inputs, idx, training=training)
             if self.clip_value:
-                inputs = tf.clip_by_value(
-                    inputs, 0, image_max_val)
+                inputs = tf.clip_by_value(inputs, 0, 1)
         inputs = tf.cast(inputs, image_dtype)
         return inputs
 
     def apply_transform(self, inputs, i, training=True):
+
         if i == 0:
             inputs = self.brightness_op.apply(inputs, training=training)
         elif i == 1:
@@ -279,27 +223,19 @@ class ColorJitter(BaseOps):
 
 
 class Solarize(BaseOps):
-    """ Image solarization transform.
-
-    Args:
-    threshold: int or float, threshold value for the solarization 
-        transform. 
-    p: float, probability of applying the transform.
-    seed: Random seed. Must have dtype int32 or int64 
-        (When using XLA/TPU, only int32 is allowed).
-    name: str, a name for the operation (optional).
-    """
 
     def __init__(self,
                  threshold=127,
                  p=0.2,
+                 seed=None,
                  name=None,
                  **kwargs):
         super(Solarize, self).__init__(
-            p=p, name=name, **kwargs
+            p=p, seed=seed, name=name, **kwargs
         )
 
         self.threshold = threshold
+        self.seed = seed
 
     def apply(self, inputs, training=True):
         if self.threshold < 1.0 and inputs.dtype != tf.uint8:
@@ -307,8 +243,7 @@ class Solarize(BaseOps):
         else:
             maxval = 255
         
-        assert self.threshold < maxval, 'threshold cannot be \
-        greater than the maximum value'
+        assert self.threshold < maxval, 'threshold cannot be greater than the maximum value'
 
         if training:
             image = tf.where(inputs < self.threshold, inputs, maxval - inputs)
@@ -318,18 +253,9 @@ class Solarize(BaseOps):
 
 
 class ToGray(BaseOps):
-    """ Converts RGB image to a grayscale image
-    
-    Args:
-    p: float, probability of applying the transform.
-    seed: Random seed. Must have dtype int32 or int64 
-        (When using XLA/TPU, only int32 is allowed).
-    name: str, a name for the operation (optional).
-    """
-
     def __init__(self, p=0.2, name=None, **kwargs):
         super(ToGray, self).__init__(
-            p=p, name=name, **kwargs
+            p=p, seed=None, name=name, **kwargs
         )
 
     def apply(self, inputs, training=True):
@@ -344,18 +270,6 @@ class ToGray(BaseOps):
 
 
 class GaussianBlur(BaseOps):
-    """ Applies Gaussian blur filter
-    
-    Args:
-    kernel_size: int, specifies the size of the kernel/filter
-    sigma: float, specifies the standard deviation in x and y 
-        direction of the Gaussian kernel/filter
-    padding: str, specifies the type of padding operation to use
-    p: float, probability of applying the transform.
-    seed: Random seed. Must have dtype int32 or int64 
-        (When using XLA/TPU, only int32 is allowed).
-    name: str, a name for the operation (optional).
-    """
     #TODO: Simpler implementation of GaussianBlur
     def __init__(self,
                  kernel_size,
@@ -366,7 +280,7 @@ class GaussianBlur(BaseOps):
                  **kwargs):
         
         super(GaussianBlur, self).__init__(
-            p=p, name=name, **kwargs
+            p=p, seed=None, name=name, **kwargs
         )
 
         self.kernel_size = kernel_size
@@ -406,6 +320,7 @@ class GaussianBlur(BaseOps):
         else:
             return inputs
 
+
 class Normalize(BaseOps):
     def __init__(self,
                  mean=[0.4914, 0.4822, 0.4465],
@@ -414,7 +329,7 @@ class Normalize(BaseOps):
                  name=None,
                  **kwargs):
         super(Normalize, self).__init__(
-            p=1.0, always_apply=True, name=name, **kwargs
+            p=1.0, always_apply=True, seed=None, name=name, **kwargs
         )
 
         self.mean = mean

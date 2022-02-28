@@ -16,7 +16,7 @@ config_flags.DEFINE_config_file('configs')
 
 def main(_):
     # Set random seed
-    tf.random.set_seed(FLAGS.configs.seed)
+    # tf.random.set_seed(FLAGS.configs.seed)
 
     # Setup GPU/TPU
     strategy= setup_accelerator(**FLAGS.configs.accelerator_configs)
@@ -50,8 +50,7 @@ def main(_):
 
     steps_per_epoch = dataset.num_train_examples // FLAGS.configs.batch_size
     eval_steps = dataset.num_eval_examples // FLAGS.configs.eval_batch_size
-    max_steps = int(dataset.num_train_examples // FLAGS.configs.batch_size) \
-                * FLAGS.configs.train_epochs
+    max_steps = steps_per_epoch * FLAGS.configs.train_epochs
 
     # Load model
     with strategy.scope():

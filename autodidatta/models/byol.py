@@ -91,8 +91,6 @@ class BYOL(BaseModel):
 
         super(BYOL, self).__init__(
             backbone=backbone,
-            projector=custom_projector,
-            predictor=custom_predictor,
             classifier=classifier
         )
 
