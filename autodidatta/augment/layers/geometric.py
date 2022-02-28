@@ -2,7 +2,6 @@ from autodidatta.augment.layers.base import BaseOps
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 from tensorflow.image import sample_distorted_bounding_box
-import matplotlib.pyplot as plt
 import math
 
 
@@ -29,12 +28,11 @@ class RandomResizedCrop(BaseOps):
                  ratio=(0.75, 1.33),
                  interpolation=tf.image.ResizeMethod.BICUBIC,
                  p=1.0,
-                 seed=None,
                  name=None,
                  **kwargs):
 
         super(RandomResizedCrop, self).__init__(
-            p=p, seed=seed, name=name, **kwargs)
+            p=p, name=name, **kwargs)
 
         self.height = height
         self.width = width
@@ -91,12 +89,11 @@ class HorizontalFlip(BaseOps):
 
     def __init__(self,
                  p=0.5,
-                 seed=None,
                  name=None,
                  **kwargs):
 
         super(HorizontalFlip, self).__init__(
-            p=p, seed=seed, name=name, **kwargs
+            p=p, name=name, **kwargs
         )
 
     def apply(self, inputs, training=True):

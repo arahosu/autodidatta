@@ -19,7 +19,6 @@ class BaseOps(Layer):
     def __init__(self,
                  p=1.0,
                  always_apply=False,
-                 seed=None,
                  name=None,
                  **kwargs):
 
@@ -28,11 +27,11 @@ class BaseOps(Layer):
             **kwargs
             )
 
-        if seed is None:
-            seed = tf.random.uniform((2,), maxval=int(1e10), dtype=tf.int32)
+        # if seed is None:
+        #     seed = tf.random.uniform((2,), maxval=int(1e10), dtype=tf.int32)
 
         self.p = p
-        self.seed = [seed, seed + 1]
+        # self.seed = seed
         self.always_apply = always_apply
 
     def call(self, inputs, training=True):

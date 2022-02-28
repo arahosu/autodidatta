@@ -17,11 +17,10 @@ class RandomBrightness(BaseOps):
     def __init__(self,
                  factor,
                  p=1.0,
-                 seed=None,
                  name=None,
                  **kwargs):
         super(RandomBrightness, self).__init__(
-            p=p, seed=seed, name=name, **kwargs
+            p=p, name=name, **kwargs
         )
 
         if isinstance(factor, (tuple, list)):
@@ -39,7 +38,8 @@ class RandomBrightness(BaseOps):
         image_dtype = inputs.dtype
         delta = tf.random.uniform(
             [], tf.maximum(self.lower, 0),
-            tf.maximum(self.upper, 0), dtype=tf.float32)
+            tf.maximum(self.upper, 0),
+            dtype=tf.float32)
         if training:
             return inputs * tf.cast(delta, image_dtype)
         else:
@@ -61,12 +61,11 @@ class RandomContrast(BaseOps):
     def __init__(self,
                  factor,
                  p=1.0,
-                 seed=None,
                  name=None,
                  **kwargs):
 
         super(RandomContrast, self).__init__(
-            p=p, seed=seed, name=name, **kwargs
+            p=p, name=name, **kwargs
             )
 
         if isinstance(factor, (tuple, list)):
@@ -100,11 +99,10 @@ class RandomGamma(BaseOps):
                  gamma,
                  gain,
                  p=1.0,
-                 seed=None,
                  name=None,
                  **kwargs):
         super(RandomGamma, self).__init__(
-            p=p, seed=seed, name=name, **kwargs
+            p=p, name=name, **kwargs
             )
 
         if isinstance(gamma, (tuple, list)):
@@ -130,10 +128,10 @@ class RandomGamma(BaseOps):
 
         random_gamma = tf.random.uniform(
             [], self.lower_gamma, self.upper_gamma,
-            dtype = image_dtype)
+            dtype=image_dtype)
         random_gain = tf.random.uniform(
             [], self.lower_gain, self.upper_gain,
-            dtype = image_dtype)
+            dtype=image_dtype)
 
         if training:
             image = random_gain * tf.math.sign(inputs) * \
@@ -158,11 +156,10 @@ class RandomSaturation(BaseOps):
     def __init__(self,
                  factor,
                  p=1.0,
-                 seed=None,
                  name=None,
                  **kwargs):
         super(RandomSaturation, self).__init__(
-            p=p, seed=seed, name=name, **kwargs
+            p=p, name=name, **kwargs
         )
 
         if isinstance(factor, (tuple, list)):
@@ -175,8 +172,7 @@ class RandomSaturation(BaseOps):
     def apply(self, inputs, training=True):
         if training:
             return tf.image.random_saturation(
-                inputs, self.lower, self.upper
-            )
+                inputs, self.lower, self.upper)
         else:
             return inputs
 
@@ -195,11 +191,10 @@ class RandomHue(BaseOps):
     def __init__(self,
                  factor,
                  p=1.0,
-                 seed=None,
                  name=None,
                  **kwargs):
         super(RandomHue, self).__init__(
-            p=p, seed=seed, name=name, **kwargs
+            p=p, name=name, **kwargs
         )
 
         self.factor = factor
@@ -241,17 +236,16 @@ class ColorJitter(BaseOps):
                  p=0.8,
                  clip_value=False,
                  random_order=True,
-                 seed=None,
                  name=None,
                  **kwargs):
         super(ColorJitter, self).__init__(
-            p=p, seed=seed, name=name, **kwargs
+            p=p, name=name, **kwargs
         )
 
-        self.brightness_op = RandomBrightness(brightness, seed=seed)
-        self.contrast_op = RandomContrast(contrast, seed=seed)
-        self.saturation_op = RandomSaturation(saturation, seed=seed)
-        self.hue_op = RandomHue(hue, seed=seed)
+        self.brightness_op = RandomBrightness(brightness)
+        self.contrast_op = RandomContrast(contrast)
+        self.saturation_op = RandomSaturation(saturation)
+        self.hue_op = RandomHue(hue)
 
         self.clip_value = clip_value
         self.random_order = random_order
@@ -299,11 +293,10 @@ class Solarize(BaseOps):
     def __init__(self,
                  threshold=127,
                  p=0.2,
-                 seed=None,
                  name=None,
                  **kwargs):
         super(Solarize, self).__init__(
-            p=p, seed=seed, name=name, **kwargs
+            p=p, name=name, **kwargs
         )
 
         self.threshold = threshold
@@ -334,9 +327,9 @@ class ToGray(BaseOps):
     name: str, a name for the operation (optional).
     """
 
-    def __init__(self, p=0.2, seed=None, name=None, **kwargs):
+    def __init__(self, p=0.2, name=None, **kwargs):
         super(ToGray, self).__init__(
-            p=p, seed=seed, name=name, **kwargs
+            p=p, name=name, **kwargs
         )
 
     def apply(self, inputs, training=True):
@@ -369,12 +362,11 @@ class GaussianBlur(BaseOps):
                  sigma,
                  padding='SAME',
                  p=0.5,
-                 seed=None,
                  name=None,
                  **kwargs):
         
         super(GaussianBlur, self).__init__(
-            p=p, seed=seed, name=name, **kwargs
+            p=p, name=name, **kwargs
         )
 
         self.kernel_size = kernel_size
@@ -414,3 +406,25 @@ class GaussianBlur(BaseOps):
         else:
             return inputs
 
+class Normalize(BaseOps):
+    def __init__(self,
+                 mean=[0.4914, 0.4822, 0.4465],
+                 std=[0.247, 0.243, 0.261],
+                 rescale=True,
+                 name=None,
+                 **kwargs):
+        super(Normalize, self).__init__(
+            p=1.0, always_apply=True, name=name, **kwargs
+        )
+
+        self.mean = mean
+        self.std = std
+        self.rescale = rescale
+
+    def apply(self, inputs, training=None):
+        inputs = tf.cast(inputs, tf.float32)
+        if self.rescale:
+            inputs /= 255.
+        # The function is always called by default
+        image = (inputs - self.mean) / self.std
+        return image

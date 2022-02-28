@@ -17,12 +17,12 @@ def get_config():
     config.aug_configs = ml_collections.ConfigDict()
     config.aug_configs.brightness = 0.4
     config.aug_configs.contrast = 0.4
-    config.aug_configs.saturation = 0.4
+    config.aug_configs.saturation = 0.2
     config.aug_configs.hue = 0.1
     config.aug_configs.gaussian_prob = [0.0, 0.0]
-    config.aug_configs.solarization_prob = [0.0, 0.0]
-    config.aug_configs.mean = [0., 0., 0.]
-    config.aug_configs.std = [1., 1., 1.]
+    config.aug_configs.solarization_prob = [0.0, 0.2]
+    config.aug_configs.mean = [0.4914, 0.4822, 0.4465]
+    config.aug_configs.std = [0.247, 0.243, 0.261]
 
     # Accelerator
     config.accelerator_configs = ml_collections.ConfigDict()
@@ -31,13 +31,14 @@ def get_config():
     config.accelerator_configs.device_name = 'local'
     
     # Model
-    config.model = 'simclr'
+    config.model = 'byol'
     config.model_configs = ml_collections.ConfigDict()
     config.model_configs.backbone = 'resnet18'
-    config.model_configs.loss_temperature = 0.2
-    config.model_configs.output_dim = 128
+    config.model_configs.output_dim = 512
     config.model_configs.proj_hidden_dim = 2048
+    config.model_configs.pred_hidden_dim = 2048
     config.model_configs.num_proj_layers = 1
+    config.model_configs.num_pred_layers = 1
 
     # Training
     config.optimizer = 'adamw'
@@ -56,10 +57,14 @@ def get_config():
     config.warmup_epochs = 10
 
     # Loggings
-    config.history_dir = 'examples/training_history'
-    config.weights_dir = 'examples/weights'
-    config.weights_filename = 'simclr_weights.hdf5'
-    config.history_filename = 'simclr_results.csv'
+    # config.history_dir = 'examples/training_history'
+    # config.weights_dir = 'examples/weights'
+    config.history_dir = None
+    config.weights_dir = None
+    config.weights_filename = 'byol_weights.hdf5'
+    config.history_filename = 'byol_results.csv'
     config.callback_configs = ml_collections.ConfigDict()
+    config.callback_configs.init_tau = 0.99
+    config.callback_configs.final_tau = 1.0
     
     return config

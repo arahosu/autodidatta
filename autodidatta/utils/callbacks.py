@@ -1,4 +1,5 @@
 from datetime import datetime
+import ml_collections
 import os
 
 from autodidatta.models.byol import BYOLMAWeightUpdate
@@ -13,13 +14,17 @@ def load_callbacks(model_name,
                    weights_filename,
                    history_filename,
                    online_ft=True,
-                   callback_configs=None):
+                   max_steps=None,
+                   callback_configs: dict = None):
     
     time = datetime.now().strftime("%Y%m%d-%H%M%S")
     cb = []
+    kwargs = dict(callback_configs)
 
     if model_name == 'byol':
-        movingavg_cb = BYOLMAWeightUpdate(**callback_configs)
+        assert max_steps is not None, 'max_steps should not be None if \
+        model_name is byol'
+        movingavg_cb = BYOLMAWeightUpdate(max_steps, **callback_configs)
         cb.append(movingavg_cb)
 
     if weights_dir is not None:

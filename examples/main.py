@@ -50,6 +50,8 @@ def main(_):
 
     steps_per_epoch = dataset.num_train_examples // FLAGS.configs.batch_size
     eval_steps = dataset.num_eval_examples // FLAGS.configs.eval_batch_size
+    max_steps = int(dataset.num_train_examples // FLAGS.configs.batch_size) \
+                * FLAGS.configs.train_epochs
 
     # Load model
     with strategy.scope():
@@ -97,7 +99,9 @@ def main(_):
         FLAGS.configs.weights_dir,
         FLAGS.configs.weights_filename,
         FLAGS.configs.history_filename,
-        **FLAGS.configs.callback_configs)
+        FLAGS.configs.online_ft,
+        max_steps,
+        FLAGS.configs.callback_configs)
 
     # Train model
     model.fit(

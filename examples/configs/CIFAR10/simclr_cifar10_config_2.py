@@ -40,18 +40,22 @@ def get_config():
     config.model_configs.num_proj_layers = 1
 
     # Training
-    config.optimizer = 'adamw'
-    config.ft_optimizer = 'adamw'
+    config.optimizer = 'sgd'
+    config.ft_optimizer = 'sgd'
     config.optimizer_configs = ml_collections.ConfigDict()
-    config.optimizer_configs.weight_decay = 1e-06
+    config.optimizer_configs.momentum = 0.9
+    config.optimizer_configs.nesterov = True
+    config.optimizer_configs.clipnorm = 1.0
     config.ft_optimizer_configs = ml_collections.ConfigDict()
-    config.ft_optimizer_configs.weight_decay = 1e-06
+    config.ft_optimizer_configs.momentum = 0.9
+    config.ft_optimizer_configs.nesterov = True
+    config.ft_optimizer_configs.clipnorm = 1.0
     config.batch_size = 256
     config.eval_batch_size = 256
     config.online_ft = True
     config.linear_eval = True
-    config.learning_rate = 1e-03
-    config.ft_learning_rate = 2e-04
+    config.learning_rate = 0.4
+    config.ft_learning_rate = 0.1
     config.train_epochs = 1000
     config.warmup_epochs = 10
 

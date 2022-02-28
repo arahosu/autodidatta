@@ -106,21 +106,21 @@ class BYOL(BaseModel):
                 hidden_dim=proj_hidden_dim,
                 output_dim=output_dim,
                 num_layers=num_proj_layers,
-                batch_norm_output=True,
+                batch_norm_output=False,
                 global_bn=global_bn
             )
         else:
             self.projector = custom_projector
 
         if custom_predictor is None:
-            self.projector = predictor_head(
+            self.predictor = predictor_head(
                 hidden_dim=pred_hidden_dim,
                 output_dim=output_dim,
                 num_layers=num_pred_layers,
                 global_bn=global_bn
             )
         else:
-            self.projector = custom_projector 
+            self.predictor = custom_predictor 
 
         self.target_backbone = tf.keras.models.clone_model(self.backbone)
         self.target_projection = tf.keras.models.clone_model(self.projector)
@@ -147,7 +147,7 @@ class BYOL(BaseModel):
     def compile(self, loss_fn=None, ft_optimizer=None, **kwargs):
         super(BYOL, self).compile(ft_optimizer=ft_optimizer, **kwargs)
         if loss_fn is None:
-            self.loss_fn = byol_lossss
+            self.loss_fn = byol_loss
         else:
             self.loss_fn = loss_fn
 

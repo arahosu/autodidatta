@@ -43,14 +43,14 @@ class SimSiam(BaseModel):
             self.projector = custom_projector
 
         if custom_predictor is None:
-            self.projector = predictor_head(
+            self.predictor = predictor_head(
                 hidden_dim=pred_hidden_dim,
                 output_dim=output_dim,
                 num_layers=num_pred_layers,
                 global_bn=global_bn
             )
         else:
-            self.projector = custom_projector 
+            self.predictor = custom_predictor
         
         self.train_projector = train_projector
     
