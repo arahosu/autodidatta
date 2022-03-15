@@ -11,12 +11,41 @@ from autodidatta.utils.accelerator import setup_accelerator
 from autodidatta.utils.optimizers import load_optimizer
 from autodidatta.utils.callbacks import load_callbacks
 
+# Random seed
+flags.DEFINE_integer(
+    'seed', 42,
+    'random seed')
+
+# Dataset flags
+flags.DEFINE_enum(
+    'dataset', 'cifar10',
+    ['cifar10', 'cifar100', 'stl10', 'imagenet2012'],
+    'cifar10 (default), cifar100, stl10, imagenet2012')
+flags.DEFINE_string(
+    'dataset_dir', None,
+    'directory where the dataset is stored')
+
+# Accelerator flags
+flags.DEFINE_bool(
+    'use_gpu', 'False', 'set whether to use GPU')
+flags.DEFINE_integer(
+    'num_cores', 8, 'set number of cores/workers for TPUs/GPUs')
+flags.DEFINE_string('tpu', 'local', 'set the name of TPU device')
+
+# Logging
+flags.DEFINE_string(
+    'history_dir', None,
+    'Directory for where the training history is being saved')
+flags.DEFINE_string(
+    'weights_dir', None,
+    'Directory for where the weights are being saved')
+
 FLAGS = flags.FLAGS
 config_flags.DEFINE_config_file('configs')
 
 def main(_):
     # Set random seed
-    # tf.random.set_seed(FLAGS.configs.seed)
+    tf.random.set_seed(FLAGS.configs.seed)
 
     # Setup GPU/TPU
     strategy= setup_accelerator(**FLAGS.configs.accelerator_configs)
