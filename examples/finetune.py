@@ -53,7 +53,7 @@ flags.DEFINE_enum('dtype_str', 'mixed_bfloat16',
 flags.DEFINE_string(
     'weights', None,
     'Directory where pre-trained model weights are saved')
-flags_DEFINE_bool(
+flags.DEFINE_bool(
     'finetune', False,
     'Set whether to finetune the whole model (default) or perform linear eval')
 
