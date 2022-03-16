@@ -22,16 +22,16 @@ class WarmUpAndCosineDecay(LearningRateSchedule):
                  base_learning_rate,
                  num_examples,
                  batch_size,
-                 warmup_epochs,
                  num_train_epochs,
+                 warmup_epochs,
                  learning_rate_scaling='linear',
                  name=None):
         super(WarmUpAndCosineDecay, self).__init__()
         self.base_learning_rate = base_learning_rate
         self.num_examples = num_examples
         self.batch_size = batch_size
-        self.warmup_epochs = warmup_epochs
         self.num_train_epochs = num_train_epochs
+        self.warmup_epochs = warmup_epochs
         self.learning_rate_scaling = learning_rate_scaling
         self._name = name
 
@@ -50,7 +50,7 @@ class WarmUpAndCosineDecay(LearningRateSchedule):
                 raise ValueError('Unknown learning rate scaling {}'.format(
                     self.learning_rate_scaling))
             learning_rate = (
-                step / float(warmup_steps) * scaled_lr
+                tf.cast(step, tf.float32) / float(warmup_steps) * scaled_lr
                 if warmup_steps else scaled_lr)
 
             # Cosine decay learning rate schedule
@@ -71,17 +71,7 @@ class WarmUpAndCosineDecay(LearningRateSchedule):
 
 def load_optimizer(optimizer_name,
                    learning_rate,
-                   num_train_examples,
-                   batch_size,
-                   train_epochs,
-                   warmup_epochs,
                    optimizer_configs=None):
-
-    lr_schedule = WarmUpAndCosineDecay(
-        learning_rate, num_train_examples,
-        batch_size, warmup_epochs, train_epochs,
-        learning_rate_scaling='linear' if optimizer_name == 'sgd' else None)
-
     optimizer = OPTIMIZER[optimizer_name](
         learning_rate=learning_rate, **optimizer_configs)
     return optimizer

@@ -7,15 +7,11 @@ import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 
 def load_aug_fn_pretrain(dataset_name: str,
-                         model_name: str,
                          image_size: int,
                          aug_configs: dict,
                          seed: int = None):
 
-    if model_name == 'simclr':
-        aug_fn = SimCLRAugment
-    else:
-        aug_fn = SSLAugment
+    aug_fn = SSLAugment
 
     kwargs = dict(aug_configs)
     gaussian_prob = kwargs.pop('gaussian_prob', None)

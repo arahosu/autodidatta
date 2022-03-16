@@ -7,15 +7,15 @@ def get_config():
     config.aug_configs = ml_collections.ConfigDict()
     config.aug_configs.brightness = 0.4
     config.aug_configs.contrast = 0.4
-    config.aug_configs.saturation = 0.2
+    config.aug_configs.saturation = 0.4
     config.aug_configs.hue = 0.1
     config.aug_configs.gaussian_prob = [0.0, 0.0]
-    config.aug_configs.solarization_prob = [0.0, 0.2]
+    config.aug_configs.solarization_prob = [0.0, 0.0]
     config.aug_configs.mean = [0.4914, 0.4822, 0.4465]
     config.aug_configs.std = [0.247, 0.243, 0.261]
     
     # Model
-    config.model = 'byol'
+    config.model = 'simsiam'
     config.model_configs = ml_collections.ConfigDict()
     config.model_configs.backbone = 'resnet18'
     config.model_configs.output_dim = 512
@@ -40,7 +40,5 @@ def get_config():
     
     # Callback
     config.callback_configs = ml_collections.ConfigDict()
-    config.callback_configs.init_tau = 0.99
-    config.callback_configs.final_tau = 1.0
     
     return config

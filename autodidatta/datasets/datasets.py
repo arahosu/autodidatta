@@ -113,3 +113,20 @@ class Dataset(object):
             eval_ds, eval_batch_size, preprocess_eval, 
             drop_remainder, shuffle=False)
         return train_ds, eval_ds
+
+    def batch_and_optimize(self,
+                           dataset,
+                           batch_size,
+                           preprocess,
+                           drop_remainder,
+                           shuffle=True):
+        if shuffle:
+            dataset = dataset.shuffle(
+                buffer_size=batch_size * 50).repeat()
+        dataset = dataset.map(
+            preprocess, num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.batch(
+            batch_size, drop_remainder=drop_remainder)
+        dataset = dataset.prefetch(tf.data.AUTOTUNE)
+        return dataset
+        

@@ -1,1 +1,1 @@
-from autodidatta.models.models import get_model_cls, load_classifier # noqa
+from autodidatta.models.models import get_model_cls # noqa

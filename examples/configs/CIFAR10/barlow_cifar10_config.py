@@ -15,14 +15,13 @@ def get_config():
     config.aug_configs.std = [0.247, 0.243, 0.261]
     
     # Model
-    config.model = 'byol'
+    config.model = 'barlow_twins'
     config.model_configs = ml_collections.ConfigDict()
     config.model_configs.backbone = 'resnet18'
-    config.model_configs.output_dim = 512
+    config.model_configs.output_dim = 2048
     config.model_configs.proj_hidden_dim = 2048
-    config.model_configs.pred_hidden_dim = 2048
     config.model_configs.num_proj_layers = 1
-    config.model_configs.num_pred_layers = 1
+    config.model_configs.loss_temperature = 0.1
 
     # Training
     config.optimizer = 'adamw'
@@ -40,7 +39,5 @@ def get_config():
     
     # Callback
     config.callback_configs = ml_collections.ConfigDict()
-    config.callback_configs.init_tau = 0.99
-    config.callback_configs.final_tau = 1.0
     
     return config

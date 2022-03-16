@@ -5,14 +5,12 @@ import os
 from autodidatta.models.byol import BYOLMAWeightUpdate
 
 import tensorflow as tf
-from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint
+from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint
 
 
 def load_callbacks(model_name,
-                   history_dir,
+                   log_dir,
                    weights_dir,
-                   weights_filename,
-                   history_filename,
                    online_ft=True,
                    max_steps=None,
                    callback_configs: dict = None):
@@ -29,7 +27,9 @@ def load_callbacks(model_name,
 
     if weights_dir is not None:
         weights_dir = os.path.join(weights_dir, time)
-        os.mkdir(weights_dir)
+        if not os.path.exists(weights_dir):
+            os.makedirs(weights_dir)
+        weights_filename = model_name + '.hdf5'
         weights = ModelCheckpoint(
             os.path.join(weights_dir, weights_filename),
             save_weights_only=True,
@@ -38,15 +38,15 @@ def load_callbacks(model_name,
             save_best_only=True)
         cb.append(weights)
 
-    if history_dir is not None:
-        history_dir = os.path.join(history_dir, time)
-        os.mkdir(history_dir)
+    if log_dir is not None:
+        log_dir = os.path.join(log_dir, time)
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
 
-        # Create a callback for saving the training results into a csv file
-        csv_logger = CSVLogger(
-            os.path.join(history_dir, history_filename))
+        # Create a callback for saving the logs in TensorBoard
+        tb_cb = TensorBoard(log_dir=log_dir, histogram_freq=1)
 
-        cb.append(csv_logger)
+        cb.append(tb_cb)
     
     return cb
 

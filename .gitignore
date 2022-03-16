@@ -1,9 +1,9 @@
 *.json
 *.hdf5
 *.csv
+*.tfevents
 *.cfg
 *.txt
-*.tfrecords
 *.ipynb
 *.sh
 
@@ -12,7 +12,5 @@
 *.pyc
 *.cpython-37.pyc
 
-training_logs/
-scripts/
-weights/
+examples/log
 .ipynb_checkpoints/
