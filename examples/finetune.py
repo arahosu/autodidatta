@@ -5,11 +5,11 @@ from ml_collections.config_flags import config_flags
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
 
-from autodidatta.augment import load_aug_fn_pretrain
+import autodidatta.augment as A
 from autodidatta.datasets import Dataset
-from autodidatta.models import get_model_cls
+from autodidatta.models import get_backbone_only
 from autodidatta.utils.accelerator import setup_accelerator
-from autodidatta.utils.optimizers import load_optimizer, WarmUpAndCosineDecay
+from autodidatta.utils.optimizers import load_optimizer
 from autodidatta.utils.callbacks import load_callbacks
 
 # Random seed
@@ -44,29 +44,25 @@ flags.DEFINE_string(
 
 # Training flags
 flags.DEFINE_integer(
-    'batch_size', 1024, 'set batch size for pre-training.')
+    'batch_size', 256, 'set batch size for training')
 flags.DEFINE_integer(
-    'eval_batch_size', 256, 'set batch size for evaluation')
-flags.DEFINE_integer(
-    'train_epochs', 1000, 'Number of epochs to train the model')
+    'train_epochs', 200, 'Number of epochs to finetune the model')
 flags.DEFINE_enum('dtype_str', 'mixed_bfloat16',
     ['mixed_bfloat16', 'mixed_float16', 'float32'],
     'set global policy for dtype')
-
-# Online finetuning flags
-flags.DEFINE_bool(
-    'online_ft', True,
-    'set whether to enable online finetuning (True by default)')
+flags.DEFINE_string(
+    'weights', None,
+    'Directory where pre-trained model weights are saved')
+flags_DEFINE_bool(
+    'finetune', False,
+    'Set whether to finetune the whole model (default) or perform linear eval')
 
 # Logging
 flags.DEFINE_string(
-    'save_dir', None,
+    'save_dir', 'examples/log/finetune',
     'Tensorboard logging dir')
-flags.DEFINE_string(
-    'weights_dir', None,
-    'Directory where weights are saved')
 
-# Model-specific configs
+
 config_flags.DEFINE_config_file('configs')
 
 FLAGS = flags.FLAGS
@@ -85,65 +81,69 @@ def main(_):
 
     # Load datasets
     dataset = Dataset(FLAGS.dataset,
-                    FLAGS.train_split,
-                    FLAGS.eval_split,
-                    FLAGS.dataset_dir)
+                      FLAGS.train_split,
+                      FLAGS.eval_split,
+                      FLAGS.dataset_dir)
 
     # Load augmentation functions
-    aug_1, aug_2, eval_aug = load_aug_fn_pretrain(
-        FLAGS.dataset,
-        dataset.ds_shape[0],
-        FLAGS.configs.aug_configs,
-        FLAGS.seed)
+    train_aug = tf.keras.Sequential(
+        [
+            A.layers.RandomResizedCrop(
+                dataset.ds_shape[0], dataset.ds_shape[1], scale=(0.08, 1.0)),
+            A.layers.HorizontalFlip(
+                p=0.5),
+            A.layers.Normalize(
+                mean=FLAGS.configs.mean,
+                std=FLAGS.configs.std)
+        ]
+    )
+
+    eval_aug = tf.keras.Sequential()
+    eval_aug.add(A.layers.Normalize(
+        mean=FLAGS.configs.mean,
+        std=FLAGS.configs.std))
     
-    train_ds, eval_ds = dataset.load_pretrain_datasets(
+    if FLAGS.dataset == 'imagenet2012':
+        eval_aug.add(A.layers.CentralCrop(224, 224, 0.875))
+    
+    # Load datasets 
+    train_ds, eval_ds = dataset.load_finetune_datasets(
         batch_size=FLAGS.batch_size,
-        eval_batch_size=FLAGS.eval_batch_size,
-        train_aug=aug_1,
+        eval_batch_size=FLAGS.batch_size,
+        train_aug=train_aug,
         eval_aug=eval_aug,
-        train_aug_2=aug_2,
         seed=FLAGS.seed)
 
     steps_per_epoch = dataset.num_train_examples // FLAGS.batch_size
-    eval_steps = dataset.num_eval_examples // FLAGS.eval_batch_size
+    eval_steps = dataset.num_eval_examples // FLAGS.batch_size
     max_steps = steps_per_epoch * FLAGS.train_epochs
 
     # Load model
     with strategy.scope():
-        if FLAGS.online_ft:
-            classifier = tf.keras.Sequential(
-                [tfkl.Flatten(),
-                 tfkl.Dense(
-                     dataset.num_classes,
-                     activation='softmax')],
-                 name='classifier')
+        classifier = tf.keras.Sequential(
+            [tfkl.Flatten(),
+             tfkl.Dense(
+                 dataset.num_classes,
+                 activation='softmax')],
+            name='classifier')
         
-        model = get_model_cls(
+        backbone = get_backbone_only(
             dataset.ds_shape,
-            FLAGS.configs.model,
-            FLAGS.configs.model_configs,
-            classifier=classifier)
+            FLAGS.configs.backbone)
+        if not FLAGS.finetune:
+            backbone.trainable = False
+        backbone.load_weights(FLAGS.weights)
+    
+        model = tf.keras.Sequential(
+            [backbone, classifier])
         
-        lr_schedule = WarmUpAndCosineDecay(
-            base_learning_rate=FLAGS.configs.base_learning_rate,
-            num_examples=dataset.num_train_examples,
-            batch_size=FLAGS.batch_size,
-            num_train_epochs=FLAGS.train_epochs,
-            **FLAGS.configs.scheduler_configs)
-
         optimizer = load_optimizer(
             optimizer_name=FLAGS.configs.optimizer,
-            learning_rate=lr_schedule,
+            learning_rate=FLAGS.configs.learning_rate,
             optimizer_configs=FLAGS.configs.optimizer_configs)
-        
-        ft_optimizer = load_optimizer(
-            optimizer_name=FLAGS.configs.ft_optimizer,
-            learning_rate=FLAGS.configs.ft_learning_rate,
-            optimizer_configs=FLAGS.configs.ft_optimizer_configs)
 
         finetune_loss = tf.keras.losses.sparse_categorical_crossentropy
         model.compile(
-            ft_optimizer=ft_optimizer,
             optimizer=optimizer, loss=finetune_loss, metrics=['acc'])
         model.build((None, *dataset.ds_shape))
         model.summary()
@@ -153,7 +153,7 @@ def main(_):
         model_name=FLAGS.configs.model,
         log_dir=FLAGS.save_dir,
         weights_dir=FLAGS.save_dir,
-        online_ft=FLAGS.online_ft,
+        online_ft=True,
         max_steps=max_steps,
         callback_configs=FLAGS.configs.callback_configs)
 
@@ -169,4 +169,5 @@ def main(_):
 
 if __name__ == '__main__':
     flags.mark_flag_as_required('configs')
+    flags.mark_flag_as_required('weights')
     app.run(main)

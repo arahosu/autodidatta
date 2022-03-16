@@ -25,8 +25,7 @@ BACKBONE = {
 def get_model_cls(input_shape,
                   model_name,
                   model_configs,
-                  classifier=None
-                  ):
+                  classifier=None):
     
     kwargs = dict(model_configs)
     backbone_name = kwargs.pop('backbone', None)
@@ -34,3 +33,8 @@ def get_model_cls(input_shape,
     model_cls = MODEL_CLS[model_name]
 
     return model_cls(backbone, classifier=classifier, **kwargs)
+
+def get_backbone_only(input_shape,
+                      backbone_name):
+    
+    return BACKBONE[backbone_name](input_shape)

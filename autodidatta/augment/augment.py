@@ -1,10 +1,11 @@
 import ml_collections
 import copy
-from autodidatta.augment.sequential import SSLAugment, SimCLRAugment
+from autodidatta.augment.sequential import SSLAugment
 import autodidatta.augment as A
 
 import tensorflow as tf
 import tensorflow.keras.layers as tfkl
+
 
 def load_aug_fn_pretrain(dataset_name: str,
                          image_size: int,
@@ -35,6 +36,6 @@ def load_aug_fn_pretrain(dataset_name: str,
         A.layers.Normalize(
             mean=kwargs['mean'], std=kwargs['std']))
     if dataset_name == 'imagenet2012':
-        eval_aug_fn.add(tfkl.CenterCrop(image_size, image_size))
+        eval_aug_fn.add(A.layers.CentralCrop(image_size, image_size, 0.875))
 
     return aug_fn_1, aug_fn_2, eval_aug_fn

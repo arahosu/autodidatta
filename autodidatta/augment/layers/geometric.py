@@ -5,7 +5,6 @@ from tensorflow.image import sample_distorted_bounding_box
 
 
 class RandomResizedCrop(BaseOps):
-
     def __init__(self,
                  height,
                  width,
@@ -121,3 +120,34 @@ class CentralCrop(BaseOps):
                 return self._op(inputs)
         else:
             return self._op(inputs)
+
+
+class CentralCrop(BaseOps):
+    def __init__(self,
+                 height,
+                 width,
+                 crop_fraction,
+                 interpolation=tf.image.ResizeMethod.BICUBIC,
+                 p=1.0,
+                 name=None,
+                 **kwargs):
+
+        super(CentralCrop, self).__init__(
+            p=p, seed=None, name=name, **kwargs)
+
+        self.height= height
+        self.width = width
+        self.crop_fraction = crop_fraction
+        self.interpolation = interpolation
+    
+    def _op(self, inputs):
+        image_dtype = inputs.dtype
+        image = tf.image.central_crop(inputs, self.crop_fraction)
+        image = tf.image.resize(
+            image, [self.height, self.width], self.interpolation)
+        image = tf.cast(image, image_dtype)
+
+        return image
+
+    def apply(self, inputs, training=None):
+        return self._op(inputs)
