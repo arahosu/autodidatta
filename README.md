@@ -9,6 +9,44 @@ ADD implements some of the most popular self-supervised learning methods, includ
 - [Barlow Twins](https://arxiv.org/pdf/2103.03230.pdf)
 - [BYOL](https://arxiv.org/pdf/2006.07733.pdf)
 
+## Running the experiments
+
+### Requirements
+Dependencies (Python >= 3.7)
+
+```{bash}
+tensorflow==2.8.0
+tensorflow-addons==0.16.1	
+tensorflow_datasets
+ml_collections
+```
+
+### Model training
+Pre-training with online lienar evaluation:
+
+```{bash}
+# SimCLR pre-training on CIFAR-10 dataset
+python3 -m examples.pretrain --configs=examples/configs/CIFAR10/simclr_cifar10_config.py
+
+# SimCLR pre-training on CIFAR-10 dataset (no online linear eval)
+python3 -m examples.pretrain --configs=examples/configs/CIFAR10/simclr_cifar10_config.py --online_ft=False
+```
+
+Offline linear evaluation on pre-trained model backbone:
+```{bash}
+# SimCLR offline linear evaluation on CIFAR-10 dataset, replace MODEL_WEIGHTS_DIR with your saved model weights
+python3 -m examples.finetune --configs=examples/configs/CIFAR10/simclr_cifar10_finetune.py --weights=MODEL_WEIGHTS
+
+# SimCLR finetuning on CIFAR-10 dataset
+python3 -m examples.finetune --configs=examples/configs/CIFAR10/simclr_cifar10_finetune.py --weights=MODEL_WEIGHTS --finetune=True
+```
+
+You can also specify training split to perform linear evaluation using a fraction of training labels (i.e. 10%)
+```{bash}
+# SimCLR offline linear evaluation using 10% of training labels
+python3 -m examples.finetune --configs=examples/configs/CIFAR10/simclr_cifar10_finetune.py --weights=MODEL_WEIGHTS --train_split='train[:10%]'
+```
+
 ## Linear Evaluation Results
 
 ### CIFAR10

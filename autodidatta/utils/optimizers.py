@@ -1,27 +1,37 @@
 import tensorflow as tf
+from tensorflow.keras.optimizers.schedules import LearningRateSchedule
+from tensorflow.keras.optimizers import Adam
+from tensorflow_addons.optimizers import LAMB, AdamW, SGDW
 from math import sqrt
 
+OPTIMIZER = {
+    'lamb': LAMB,
+    'adam': Adam,
+    'adamw': AdamW,
+    'sgd': SGDW,
+}
 
-class WarmUpAndCosineDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
+class WarmUpAndCosineDecay(LearningRateSchedule):
     """Applies a warmup schedule on a given learning rate decay schedule.
+
     Taken from Google Research SimCLR repository:
-    https://github.com/google-research/simclr/blob/dec99a81a4ceccb0a5a893afecbc2ee18f1d76c3/tf2/model.py#L78
+    https://github.com/google-research/simclr
     """
 
     def __init__(self,
                  base_learning_rate,
                  num_examples,
                  batch_size,
-                 warmup_epochs,
                  num_train_epochs,
+                 warmup_epochs,
                  learning_rate_scaling='linear',
                  name=None):
         super(WarmUpAndCosineDecay, self).__init__()
         self.base_learning_rate = base_learning_rate
         self.num_examples = num_examples
         self.batch_size = batch_size
-        self.warmup_epochs = warmup_epochs
         self.num_train_epochs = num_train_epochs
+        self.warmup_epochs = warmup_epochs
         self.learning_rate_scaling = learning_rate_scaling
         self._name = name
 
@@ -40,7 +50,7 @@ class WarmUpAndCosineDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
                 raise ValueError('Unknown learning rate scaling {}'.format(
                     self.learning_rate_scaling))
             learning_rate = (
-                step / float(warmup_steps) * scaled_lr
+                tf.cast(step, tf.float32) / float(warmup_steps) * scaled_lr
                 if warmup_steps else scaled_lr)
 
             # Cosine decay learning rate schedule
@@ -58,3 +68,10 @@ class WarmUpAndCosineDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
             'base_learning_rate': self.base_learning_rate,
             'num_examples': self.num_examples,
             }
+
+def load_optimizer(optimizer_name,
+                   learning_rate,
+                   optimizer_configs=None):
+    optimizer = OPTIMIZER[optimizer_name](
+        learning_rate=learning_rate, **optimizer_configs)
+    return optimizer

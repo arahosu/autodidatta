@@ -40,7 +40,6 @@ class RandomBrightness(BaseOps):
 
 
 class RandomContrast(BaseOps):
-
     def __init__(self,
                  factor,
                  p=1.0,
@@ -71,7 +70,6 @@ class RandomContrast(BaseOps):
 
 
 class RandomGamma(BaseOps):
-
     def __init__(self,
                  gamma,
                  gain,
@@ -118,7 +116,6 @@ class RandomGamma(BaseOps):
 
 
 class RandomSaturation(BaseOps):
-
     def __init__(self,
                  factor,
                  p=1.0,
@@ -148,7 +145,6 @@ class RandomSaturation(BaseOps):
 
 
 class RandomHue(BaseOps):
-
     def __init__(self,
                  factor,
                  p=1.0,
@@ -171,7 +167,6 @@ class RandomHue(BaseOps):
 
 
 class ColorJitter(BaseOps):
-
     def __init__(self,
                  brightness,
                  contrast,
@@ -223,7 +218,6 @@ class ColorJitter(BaseOps):
 
 
 class Solarize(BaseOps):
-
     def __init__(self,
                  threshold=127,
                  p=0.2,
