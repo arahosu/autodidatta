@@ -57,7 +57,7 @@ class SimSiam(BaseModel):
     def compile(self, loss_fn=None, ft_optimizer=None, **kwargs):
         super(SimSiam, self).compile(ft_optimizer=ft_optimizer, **kwargs)
         if loss_fn is None:
-            self.loss_fn = tf.keras.losses.cosine_similarity
+            self.loss_fn = tf.keras.losses.CosineSimilarity(reduction=tf.keras.losses.Reduction.NONE)
         else:
             self.loss_fn = loss_fn
 
@@ -82,6 +82,8 @@ class SimSiam(BaseModel):
 
         loss = self.loss_fn(pi, tf.stop_gradient(zj)) / 2
         loss += self.loss_fn(pj, tf.stop_gradient(zi)) / 2
+
+        loss = tf.reduce_sum(loss) / (x.shape[0] * self.distribute_strategy.num_replicas_in_sync)
 
         return loss
 
