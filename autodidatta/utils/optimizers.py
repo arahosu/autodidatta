@@ -1,14 +1,14 @@
 import tensorflow as tf
 from tensorflow.keras.optimizers.schedules import LearningRateSchedule
-from tensorflow.keras.optimizers import SGD, Adam
-from tensorflow_addons.optimizers import LAMB, AdamW
+from tensorflow.keras.optimizers import Adam
+from tensorflow_addons.optimizers import LAMB, AdamW, SGDW
 from math import sqrt
 
 OPTIMIZER = {
     'lamb': LAMB,
     'adam': Adam,
     'adamw': AdamW,
-    'sgd': SGD,
+    'sgd': SGDW,
 }
 
 class WarmUpAndCosineDecay(LearningRateSchedule):

@@ -37,8 +37,7 @@ class Dataset(object):
                                eval_aug: Any,
                                train_aug_2: Any = None,
                                drop_remainder=True,
-                               seed: int = None,
-                               dtype_policy: str = 'float32'):
+                               seed: int = None):
 
         train_ds = tfds.load(self.dataset_name,
                              split=self.train_split,
@@ -87,25 +86,35 @@ class Dataset(object):
                                finetune_train_split=None,
                                finetune_eval_split=None,
                                drop_remainder=True,
-                               seed: int = None,
-                               dtype_policy: str = 'float32'):
+                               seed: int = None):
 
         if finetune_train_split is None:
             finetune_train_split = self.train_split
         if finetune_eval_split is None:
             finetune_eval_split = self.eval_split
+        
+        train_ds = tfds.load(self.dataset_name,
+                             split=finetune_train_split,
+                             data_dir=self.dataset_dir,
+                             shuffle_files=True,
+                             as_supervised=True)
+
+        eval_ds = tfds.load(self.dataset_name,
+                            split=finetune_eval_split,
+                            data_dir=self.dataset_dir,
+                            shuffle_files=False,
+                            as_supervised=True)
 
         def preprocess_finetune(image, label, aug_fn):
-            dtype = DTYPE[dtype_policy]
+            image_size = self.ds_shape[0]
             aug_img = aug_fn(
                 image, training=True)
             aug_img = tf.reshape(
                 aug_img, [image_size, image_size, 3])
-            label = tf.cast(label, dtype)
             return aug_img, label
         
-        preprocess_train = partial(preprocess_finetune, train_aug)
-        preprocess_eval = partial(preprocess_finetune, eval_aug)
+        preprocess_train = partial(preprocess_finetune, aug_fn=train_aug)
+        preprocess_eval = partial(preprocess_finetune, aug_fn=eval_aug)
 
         train_ds = self.batch_and_optimize(
             train_ds, batch_size, preprocess_train, drop_remainder)
