@@ -35,16 +35,16 @@ python3 -m examples.pretrain --configs=examples/configs/CIFAR10/simclr_cifar10_c
 Offline linear evaluation on pre-trained model backbone:
 ```{bash}
 # SimCLR offline linear evaluation on CIFAR-10 dataset, replace MODEL_WEIGHTS_DIR with your saved model weights
-python3 -m examples.finetune --configs=examples/configs/CIFAR10/simclr_cifar10_finetune.py --weights=MODEL_WEIGHTS
+python3 -m examples.train_classifier --configs=examples/configs/CIFAR10/simclr_cifar10_finetune.py --weights=MODEL_WEIGHTS
 
 # SimCLR finetuning on CIFAR-10 dataset
-python3 -m examples.finetune --configs=examples/configs/CIFAR10/simclr_cifar10_finetune.py --weights=MODEL_WEIGHTS --finetune=True
+python3 -m examples.train_classifier --configs=examples/configs/CIFAR10/simclr_cifar10_finetune.py --weights=MODEL_WEIGHTS --finetune=True
 ```
 
 You can also specify training split to perform linear evaluation using a fraction of training labels (i.e. 10%)
 ```{bash}
 # SimCLR offline linear evaluation using 10% of training labels
-python3 -m examples.finetune --configs=examples/configs/CIFAR10/simclr_cifar10_finetune.py --weights=MODEL_WEIGHTS --train_split='train[:10%]'
+python3 -m examples.train_classifier --configs=examples/configs/CIFAR10/simclr_cifar10_finetune.py --weights=MODEL_WEIGHTS --train_split='train[:10%]'
 ```
 
 ## Linear Evaluation Results
