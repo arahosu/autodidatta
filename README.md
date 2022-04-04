@@ -88,3 +88,7 @@ python3 -m examples.train_classifier --configs=examples/configs/CIFAR10/simclr_c
 | SimCLR       | 34.86 | 58.05 |
 | SimSiam      | 32.89 | 51.74 |
 | Supervised   | 8.45  | 23.07 |
+
+## Acknowledgements
+
+Many thanks to [Google TPU Research Cloud](https://sites.research.google/trc/about/) for providing me with access to TPUs. 
